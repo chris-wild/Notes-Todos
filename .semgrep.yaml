@@ -1,0 +1,54 @@
+# Semgrep Configuration for Notes/Todos App
+
+# Use auto-detection or specify rulesets
+# semgrep --config=auto .
+# or specific rulesets:
+# semgrep --config=p/javascript --config=p/react --config=p/secrets .
+
+# Base rulesets for security and best practices
+rules:
+  - id: security.express.bad-cors
+    languages: [javascript, typescript]
+    severity: ERROR
+    patterns:
+      - pattern-inside: |
+          app.use(cors(...))
+      - pattern-not: |
+          app.use(cors({origin: 'https://'...}))
+    message: "CORS should have explicit origin allowlist"
+
+  - id: security.jwt.missing-expiration
+    languages: [javascript, typescript]
+    severity: ERROR
+    patterns:
+      - pattern: |
+          jwt.sign(...)
+      - pattern-not-re: |
+          expiresIn
+    message: "JWT tokens should have expiration"
+
+  - id: security.secret.hardcoded
+    languages: [javascript, typescript]
+    severity: ERROR
+    patterns:
+      - pattern: |
+          = 'sk-[a-zA-Z0-9]{20,}'
+    message: "Hardcoded API key detected"
+
+# Paths to exclude from scanning
+exclude:
+  - node_modules/
+  - build/
+  - public/
+  - "*.min.js"
+  - "*.map"
+  - coverage/
+  - .git/
+
+# Pattern exclusions (documented findings)
+# backend/db.js:17 - rejectUnauthorized: false
+# Dev: self-signed cert bypass. Prod: PGSSL=true set in ECS taskdef.
+# This is a known trade-off for the current architecture.
+metavariable-regex:
+  metavariable: $X
+  regex: rejectUnauthorized

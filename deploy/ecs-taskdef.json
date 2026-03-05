@@ -1,0 +1,64 @@
+{
+  "family": "notes-todos-app",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/notesTodosTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/notesTodosTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "notes-todos-app",
+      "image": "YOUR_AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/notes-todos-app:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3001,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "NODE_ENV",
+          "value": "production"
+        },
+        {
+          "name": "PGSSL",
+          "value": "true"
+        },
+        {
+          "name": "AWS_REGION",
+          "value": "eu-west-2"
+        },
+        {
+          "name": "S3_BUCKET",
+          "value": "promptbuilt-todo-recipes-YOUR_AWS_ACCOUNT_ID-eu-west-2"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-2:YOUR_AWS_ACCOUNT_ID:secret:notes-todos/DATABASE_URL-vDAjpV"
+        },
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-2:YOUR_AWS_ACCOUNT_ID:secret:notes-todos/JWT_SECRET-eqxH9W"
+        },
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-2:YOUR_AWS_ACCOUNT_ID:secret:notes-todos/ANTHROPIC_API_KEY-iBM2Lj"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/notes-todos-app",
+          "awslogs-region": "eu-west-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}
