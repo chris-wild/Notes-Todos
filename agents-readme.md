@@ -10,12 +10,8 @@ and recipes programmatically. All endpoints use API key authentication.
 Every request must include an `x-api-key` header.
 
 ```
-x-api-key: YOUR_API_KEY
+x-api-key: 2998cfbe4f5b9acf1a30c5a56c7036765a53ae540ff92e177c8d8416dbd62aa5
 ```
-
-API keys are created through the web UI (Settings > API Keys). Each key is
-scoped to a single user account -- all resources created through the API
-belong to that user.
 
 | Status | Body | Meaning |
 |--------|------|---------|
@@ -205,6 +201,15 @@ Fields:
   pdf         (file,   optional) -- replaces the existing file
   remove_pdf  ("true", optional) -- removes the existing file without replacement
 ```
+
+### Download a recipe's PDF
+
+```
+GET /recipes/:id/pdf
+```
+
+Returns the PDF file as binary with `Content-Type: application/pdf`.
+Returns `404` if the recipe has no attached file.
 
 ### Delete a recipe
 

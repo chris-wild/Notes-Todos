@@ -1781,6 +1781,45 @@ app.delete('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
   }
 });
 
+app.get('/api/v1/recipes/:id/pdf', authenticateAPIKey, async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT pdf_filename, pdf_original_name FROM recipes WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+
+    const row = result.rows[0];
+    if (!row || !row.pdf_filename) {
+      return res.status(404).json({ error: 'PDF not found' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="${(row.pdf_original_name || 'recipe.pdf').replace(/"/g, '')}"`
+    );
+
+    if (s3.isEnabled()) {
+      const stream = await s3.getPdfStream(row.pdf_filename);
+      stream.pipe(res);
+    } else {
+      let filePath;
+      try {
+        filePath = resolveRecipeUploadPath(row.pdf_filename);
+      } catch (err) {
+        return res.status(404).json({ error: 'PDF file not found on disk' });
+      }
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'PDF file not found on disk' });
+      }
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 async function start() {
   await migrate();
 

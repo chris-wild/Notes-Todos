@@ -265,6 +265,7 @@ DELETE /api/v1/todos/:id
 ```
 GET    /api/v1/recipes           # supports ?search=
 GET    /api/v1/recipes/:id
+GET    /api/v1/recipes/:id/pdf   # streams the PDF file
 POST   /api/v1/recipes           # multipart/form-data with optional image/PDF
 PUT    /api/v1/recipes/:id       # multipart/form-data, supports remove_pdf
 DELETE /api/v1/recipes/:id
