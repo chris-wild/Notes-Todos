@@ -91,7 +91,6 @@ bash scripts/dev_frontend.sh
 | `PGSSL` | No | Set to `true` for SSL (needed for RDS) |
 | `JWT_SECRET` | Recommended | Stable secret so tokens survive restarts |
 | `PORT` | No | Defaults to `3001` |
-| `ANTHROPIC_API_KEY` | No | Enables recipe ingredient automation (Claude) |
 | `S3_BUCKET` | No | Enables S3 storage for recipe PDFs |
 | `ENCRYPTION_KEY` | Recommended | Encryption key for API key storage at rest (falls back to `JWT_SECRET`) |
 | `CORS_ORIGIN` | No | Restrict CORS in prod (e.g. `https://yourdomain.com`) |

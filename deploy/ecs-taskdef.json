@@ -45,10 +45,6 @@
         {
           "name": "JWT_SECRET",
           "valueFrom": "arn:aws:secretsmanager:eu-west-2:YOUR_AWS_ACCOUNT_ID:secret:notes-todos/JWT_SECRET-eqxH9W"
-        },
-        {
-          "name": "ANTHROPIC_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:eu-west-2:YOUR_AWS_ACCOUNT_ID:secret:notes-todos/ANTHROPIC_API_KEY-iBM2Lj"
         }
       ],
       "logConfiguration": {

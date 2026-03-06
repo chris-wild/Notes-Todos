@@ -19,42 +19,6 @@ const { convertImageToPdf, isImageMime, IMAGE_MIME_TYPES } = require('./image-to
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const NODE_ENV = process.env.NODE_ENV || 'development';
-const RAW_ANTHROPIC_KEY = (process.env.ANTHROPIC_API_KEY || '').trim();
-let ingredientAutomationEnabled = false;
-
-async function verifyAnthropicKey(context = 'startup') {
-  if (!RAW_ANTHROPIC_KEY) {
-    ingredientAutomationEnabled = false;
-    if (context === 'startup') {
-      console.log('Ingredient automation disabled: no ANTHROPIC_API_KEY configured.');
-    }
-    return;
-  }
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/models', {
-      method: 'GET',
-      headers: {
-        'x-api-key': RAW_ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01'
-      }
-    });
-    if (!resp.ok) {
-      throw new Error(`status ${resp.status}`);
-    }
-    ingredientAutomationEnabled = true;
-    console.log(`[recipes] Ingredient automation enabled (${context}).`);
-  } catch (err) {
-    ingredientAutomationEnabled = false;
-    console.warn(`[recipes] Ingredient automation disabled (${context}): ${err.message}`);
-  }
-}
-
-verifyAnthropicKey('startup');
-
-function isIngredientAutomationEnabled() {
-  return ingredientAutomationEnabled;
-}
-
 // JWT secret - use env var for persistence across restarts, or generate random
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
@@ -1204,11 +1168,10 @@ app.get(
 // Flow: Check DB first → if cached, use it (skip OCR) → else OCR → save to DB → create todos
 app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (req, res) => {
   try {
-    // Resolve Anthropic API key: per-user key takes priority, then global env var
+    // Resolve Anthropic API key from per-user setting
     const userRow = await db.query('SELECT anthropic_api_key FROM users WHERE id = $1', [req.userId]);
     const rawUserKey = userRow.rows[0]?.anthropic_api_key;
-    const userAnthropicKey = rawUserKey ? decrypt(rawUserKey) : null;
-    const resolvedApiKey = userAnthropicKey || RAW_ANTHROPIC_KEY;
+    const resolvedApiKey = rawUserKey ? decrypt(rawUserKey) : null;
 
     if (!resolvedApiKey) {
       return res.status(403).json({ error: 'No Anthropic API key configured. Add one in Admin settings.' });
@@ -1320,9 +1283,7 @@ app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (r
   } catch (err) {
     try { await db.query('ROLLBACK'); } catch {}
     if (err && err.code === 'AI_UNAUTHORIZED') {
-      ingredientAutomationEnabled = false;
-      console.warn('Ingredient automation disabled due to Anthropic authorization failure.');
-      return res.status(503).json({ error: 'Ingredient automation is currently disabled' });
+      return res.status(503).json({ error: 'Anthropic API key is invalid. Update it in Admin settings.' });
     }
     res.status(500).json({ error: err.message });
   }
@@ -1332,11 +1293,9 @@ app.get('/api/features', authenticateToken, async (req, res) => {
   try {
     const userRow = await db.query('SELECT anthropic_api_key FROM users WHERE id = $1', [req.userId]);
     const hasUserKey = !!userRow.rows[0]?.anthropic_api_key;
-    res.json({
-      ingredientAutomation: hasUserKey || isIngredientAutomationEnabled()
-    });
+    res.json({ ingredientAutomation: hasUserKey });
   } catch (err) {
-    res.json({ ingredientAutomation: isIngredientAutomationEnabled() });
+    res.json({ ingredientAutomation: false });
   }
 });
 

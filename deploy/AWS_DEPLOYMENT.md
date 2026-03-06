@@ -46,8 +46,6 @@ Backend runtime environment variables:
 - `CORS_ORIGIN` (optional)
   - For same-origin deployment behind ALB, you can leave this unset.
   - If you need it: comma-separated origins, e.g. `https://notes.example.com`.
-- `ANTHROPIC_API_KEY` (optional)
-  - Enables recipe ingredient extraction via Claude. Store as a Secrets Manager secret (`notes-todos/ANTHROPIC_API_KEY`).
 - `PORT` (optional)
   - Defaults to `3001`.
 

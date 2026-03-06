@@ -50,7 +50,7 @@ EXPOSE 3001
 # Optional:
 # - PGSSL=true (for AWS RDS)
 # - JWT_SECRET
-# - ANTHROPIC_API_KEY (for recipe ingredient extraction)
+# - ENCRYPTION_KEY (for API key encryption at rest)
 # - CORS_ORIGIN (comma-separated)
 # - PORT
 CMD ["node", "backend/server.js"]

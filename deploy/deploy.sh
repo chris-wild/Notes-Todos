@@ -63,11 +63,6 @@ CURRENT_TD_ARN=$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "
 aws ecs describe-task-definition --task-definition "$CURRENT_TD_ARN" --region "$AWS_REGION" \
   --query 'taskDefinition' --output json > "$TMP_JSON"
 
-# Anthropic API key secret (required for ingredient extraction in prod)
-ANTHROPIC_SECRET_ID="notes-todos/ANTHROPIC_API_KEY"
-ANTHROPIC_SECRET_ARN=$(aws secretsmanager describe-secret --secret-id "$ANTHROPIC_SECRET_ID" --region "$AWS_REGION" --query 'ARN' --output text 2>/dev/null || true)
-export ANTHROPIC_SECRET_ARN
-
 node - <<'NODE'
 const fs = require('fs');
 const p = process.env.TMP_JSON;
@@ -95,19 +90,12 @@ if (domain) {
   else env.push({ name: 'CORS_ORIGIN', value: origin });
 }
 
-// Remove legacy OPENAI_API_KEY if present
+// Remove legacy secrets (OPENAI_API_KEY, ANTHROPIC_API_KEY) if present
+// Anthropic keys are now stored per-user in the database, not as env vars
 const secrets = c.secrets || (c.secrets = []);
-const openaiIdx = secrets.findIndex(s => s.name === 'OPENAI_API_KEY');
-if (openaiIdx >= 0) secrets.splice(openaiIdx, 1);
-
-// Update/insert ANTHROPIC_API_KEY secret
-const anthropicArn = (process.env.ANTHROPIC_SECRET_ARN || '').trim();
-if (anthropicArn) {
-  const idx = secrets.findIndex(s => s.name === 'ANTHROPIC_API_KEY');
-  if (idx >= 0) secrets[idx].valueFrom = anthropicArn;
-  else secrets.push({ name: 'ANTHROPIC_API_KEY', valueFrom: anthropicArn });
-} else {
-  console.warn('WARN: ANTHROPIC_SECRET_ARN is not set; ANTHROPIC_API_KEY will not be available in the task.');
+for (const legacyName of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']) {
+  const idx = secrets.findIndex(s => s.name === legacyName);
+  if (idx >= 0) secrets.splice(idx, 1);
 }
 
 fs.writeFileSync(p, JSON.stringify(td, null, 2));
