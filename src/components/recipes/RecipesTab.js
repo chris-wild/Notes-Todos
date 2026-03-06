@@ -25,12 +25,10 @@ export default function RecipesTab({
   onCancelEdit,
   onCreateIngredientTodos,
 }) {
-  const { API_URL } = useAuth();
+  const { API_URL, token } = useAuth();
 
-  // Construct the PDF URL. When API_URL is an absolute URL (e.g. http://host:3001/api)
-  // the token query param is appended. When it's a relative path ("/api") it's used as-is.
   const pdfUrl = (recipeId) =>
-    `${(API_URL || '').startsWith('http') ? '/api' : API_URL}/recipes/${recipeId}/pdf`;
+    `${(API_URL || '').startsWith('http') ? '/api' : API_URL}/recipes/${recipeId}/pdf?token=${encodeURIComponent(token)}`;
 
   return (
     <div className="recipes-section">
