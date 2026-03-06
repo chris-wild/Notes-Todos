@@ -10,7 +10,7 @@ and recipes programmatically. All endpoints use API key authentication.
 Every request must include an `x-api-key` header.
 
 ```
-x-api-key: 2998cfbe4f5b9acf1a30c5a56c7036765a53ae540ff92e177c8d8416dbd62aa5
+x-api-key: <YOUR_NOTES_AND_TOKO_API_KEY_HERE>
 ```
 
 | Status | Body | Meaning |
