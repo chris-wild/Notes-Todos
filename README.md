@@ -1,6 +1,10 @@
 # Notes & Todos App
 
-A full-stack multi-user notes, todos, and recipes application with a React frontend and a Node/Express + PostgreSQL backend.
+This project started when I wanted to hook up my Openclaw to my Google Keep application, and I discovered that API access to Google Keep is blocked unless you have a paid account. There is an unofficial workaround (https://github.com/kiwiz/gkeepapi) but I figured it would be a good excuse to get coding.
+
+It's an API-first notes and todo app, with the ability to create multiple toDo categories. I then bolted on recipe management (you can upload a recipe in PDF format, or even take a photo of a recipe from a book, and the app will strip out the list of ingredients and dump them into a new ToDo list). You will need to set your Anthropic API key to get this working as it relies on Anthropic's OCR capability. You only need to run one OCR task for each recipe, as the data is stored in the DB. (The second time you click on the create ingredient list it pulls the data from the DB rather than re-running the OCR) 
+
+
 
 ## Stack
 
@@ -87,9 +91,9 @@ bash scripts/dev_frontend.sh
 | `PGSSL` | No | Set to `true` for SSL (needed for RDS) |
 | `JWT_SECRET` | Recommended | Stable secret so tokens survive restarts |
 | `PORT` | No | Defaults to `3001` |
-| `ANTHROPIC_API_KEY` | No | Fallback Anthropic key for ingredient extraction (users can set their own via Admin) |
-| `ENCRYPTION_KEY` | Recommended | Secret for encrypting API keys at rest (AES-256-GCM). Falls back to deriving from `JWT_SECRET` |
+| `ANTHROPIC_API_KEY` | No | Enables recipe ingredient automation (Claude) |
 | `S3_BUCKET` | No | Enables S3 storage for recipe PDFs |
+| `ENCRYPTION_KEY` | Recommended | Encryption key for API key storage at rest (falls back to `JWT_SECRET`) |
 | `CORS_ORIGIN` | No | Restrict CORS in prod (e.g. `https://yourdomain.com`) |
 
 ### Environment variables (frontend)
@@ -97,7 +101,7 @@ bash scripts/dev_frontend.sh
 Create `.env.development` in the project root:
 
 ```bash
-REACT_APP_INSTANCE=dev   # dev styling (red primary buttons)
+REACT_APP_INSTANCE=dev   # dev styling (red primary buttons) + enables API Keys tab
 ```
 
 > `.env.development` is gitignored — do not commit it.
@@ -112,8 +116,9 @@ notes-todos/
 │   ├── server.js          # Express app and all API routes
 │   ├── db.js              # Postgres pool (pg)
 │   ├── migrate.js         # Idempotent schema migrations (runs on startup)
-│   ├── crypto-utils.js    # AES-256-GCM encryption + HMAC hashing for API keys
 │   ├── s3.js              # S3 helpers for recipe PDF storage
+│   ├── crypto-utils.js    # AES-256-GCM encryption + HMAC hashing for API keys
+│   ├── image-to-pdf.js    # Image-to-PDF conversion (sharp + pdf-lib)
 │   ├── uploads/recipes/   # Local PDF storage (dev only, gitignored)
 │   └── package.json
 ├── src/
@@ -127,7 +132,7 @@ notes-todos/
 │   ├── components/
 │   │   ├── AuthPage.js                     # Login + register forms
 │   │   ├── AboutModal.js                   # About modal (shared across auth + main app)
-│   │   ├── ClaudeModal.js                  # Claude co-author profile modal
+│   │   ├── ClaudeModal.js                  # Claude info modal
 │   │   ├── AdminPanel.js                   # Password reset + API key management
 │   │   ├── notes/
 │   │   │   ├── NotesTab.js                 # Sort toolbar, composer, note grid, note modal
@@ -140,17 +145,17 @@ notes-todos/
 │       ├── renderWithLinks.js              # Converts URLs in text to clickable links
 │       └── sortNotes.js                    # Note sort logic (date/alpha, asc/desc)
 ├── public/
-│   ├── index.html
 │   └── index.html
 ├── scripts/
 │   ├── dev_backend.sh     # Dev backend runner (Docker + node --watch)
 │   ├── dev_frontend.sh    # Dev frontend runner
-│   └── owasp-scan.sh      # OWASP ZAP scanner (baseline + full)
+│   └── owasp-scan.sh      # OWASP ZAP security scanner (baseline + full)
 ├── deploy/
 │   ├── AWS_DEPLOYMENT.md  # Production deployment guide
 │   ├── LOCAL_DEV.md       # Local dev setup details
 │   ├── deploy.sh          # ECS deploy script
 │   └── ecs-taskdef.json   # ECS task definition
+├── agents-readme.md       # Agent-facing API reference (for AI agents / integrations)
 └── package.json           # Frontend dependencies + semgrep scripts
 ```
 
@@ -162,10 +167,10 @@ notes-todos/
 - Per-user data isolation: notes, todos, API keys, recipes
 - **Notes**: create, edit, delete, pin, reorder, sort
 - **Todos**: create, complete, delete, categorise
-- **Recipes**: create with notes and a PDF attachment; ingredient extraction via Claude
-- **Account**: change password, manage App API keys, configure Anthropic API key
-- REST API with `x-api-key` authentication (per user)
-- Per-user Anthropic API key storage for ingredient extraction (BYOK)
+- **Recipes**: create with notes and a PDF or image attachment; images auto-converted to PDF server-side; ingredient extraction via Claude
+- **Account**: change password, create/view/delete API keys, per-user Anthropic API key
+- REST API with `x-api-key` authentication (per user) — notes, todos, and recipes
+- Agent-friendly API reference (`agents-readme.md`) for AI agent integrations
 - Dark mode UI
 
 ---
@@ -192,15 +197,9 @@ Tables (created and migrated automatically on startup):
 - Token stored in `localStorage`; pass as `Authorization: Bearer <token>`
 
 **REST API** — API key:
-- Create keys from the Admin panel (App API Keys section)
+- Create keys from the Account tab (dev instance only)
 - Pass as `x-api-key: YOUR_KEY` header
 - Keys are scoped to the creating user
-
-**Anthropic API key** (optional, per-user):
-- Each user can paste their own Anthropic API key in Admin settings
-- Enables the "Create ingredient list" feature on recipes (PDF/text OCR via Claude)
-- Keys are validated against the Anthropic API on save
-- If no per-user key is set, falls back to the server-level `ANTHROPIC_API_KEY` env var
 
 ---
 
@@ -228,9 +227,6 @@ DELETE /api/todos/:id
 GET    /api/keys
 POST   /api/keys
 DELETE /api/keys/:id
-GET    /api/anthropic-key
-PUT    /api/anthropic-key
-DELETE /api/anthropic-key
 GET    /api/recipes
 POST   /api/recipes
 PUT    /api/recipes/:id
@@ -265,42 +261,43 @@ PATCH  /api/v1/todos/:id/incomplete
 DELETE /api/v1/todos/:id
 ```
 
-See `API_DOCUMENTATION.md` for full request/response examples.
+**Recipes:**
+```
+GET    /api/v1/recipes           # supports ?search=
+GET    /api/v1/recipes/:id
+POST   /api/v1/recipes           # multipart/form-data with optional image/PDF
+PUT    /api/v1/recipes/:id       # multipart/form-data, supports remove_pdf
+DELETE /api/v1/recipes/:id
+```
+
+See `API_DOCUMENTATION.md` for full request/response examples, or `agents-readme.md` for an agent-friendly reference.
 
 ---
 
 ## Security
 
 ### Passwords
-- **Argon2id** for all new password hashes (64 MiB memory, 3 iterations, parallelism 1)
-- Legacy bcrypt hashes are verified on login and automatically upgraded to Argon2id
-- Minimum password length enforced (6 characters)
+- Argon2id (64 MiB memory, 3 iterations, parallelism 1) for new hashes
+- Bcrypt legacy verification with automatic Argon2id upgrade on login
 
-### API key storage
-- **App API keys** and **Anthropic API keys** are encrypted at rest using AES-256-GCM
-- Encryption key derived from the `ENCRYPTION_KEY` env var (falls back to `JWT_SECRET` via HKDF)
-- App API keys use an HMAC-SHA256 hash for fast authentication lookups — the raw key is never compared directly in the database
-- Existing plaintext keys are automatically encrypted on server startup (idempotent migration)
+### API Key Storage
+- AES-256-GCM encryption at rest for all API keys (app keys and Anthropic keys)
+- HMAC-SHA256 hashing for constant-time key lookup
+- Key derived from `ENCRYPTION_KEY` (or `JWT_SECRET` fallback) via HKDF-SHA256
 
-### Transport and headers
+### Transport & Headers
 - Helmet (CSP, HSTS in prod, referrer policy, permissions policy)
-- CORS restricted via `CORS_ORIGIN` in production
 - Rate limiting on auth endpoints
-
-### Input validation
+- CORS restricted via `CORS_ORIGIN` in production
 - Path traversal guard on recipe PDF filenames
-- JWT token expiry (7 days)
 
-### Static analysis (SAST)
-- Semgrep runs automatically before each deploy (`npm run semgrep`) with JavaScript, React, and secrets rulesets
-- Deploy fails if Semgrep finds issues
+### Static Analysis (SAST)
+- Semgrep security scanning built into the build chain: `npm run semgrep`
+- Covers JavaScript, React, and secrets detection rulesets
 
-### Dynamic analysis (DAST)
-- OWASP ZAP scans via Docker (`scripts/owasp-scan.sh`)
-- **Baseline scan** (passive, safe for prod): `npm run owasp:baseline https://yourapp.com`
-- **Full scan** (active, staging/local only): `npm run owasp:full http://localhost:3001`
-- Deploy with `--scan` flag to run a baseline scan after deployment: `./deploy/deploy.sh --scan`
-- Reports output to `reports/owasp/` (gitignored)
+### Dynamic Analysis (DAST)
+- OWASP ZAP scanning: `npm run owasp:baseline` (passive) or `npm run owasp:full` (active)
+- Optional on-deploy scan via `./deploy/deploy.sh --scan`
 
 ---
 
@@ -337,7 +334,7 @@ Then run:
 ## Development Notes
 
 - The frontend uses the CRA proxy (`package.json` `"proxy"`) so `/api/...` calls in dev hit `localhost:3001` automatically
-- `REACT_APP_INSTANCE=dev` enables dev button styling; on `localhost` this is inferred automatically if the env var is not set
+- `REACT_APP_INSTANCE=dev` enables the API Keys tab and dev button styling; on `localhost` this is inferred automatically if the env var is not set
 - Semgrep security scanning: `npm run semgrep` (requires `semgrep` installed)
 - Backend migrations are idempotent — safe to restart at any time
 

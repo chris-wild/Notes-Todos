@@ -50,12 +50,12 @@ export default function RecipesTab({
         />
         <div className="pdf-upload-section">
           <label htmlFor="recipe-pdf-input" className="pdf-upload-label">
-            Attach PDF (optional):
+            Attach PDF or image (optional):
           </label>
           <input
             type="file"
             id="recipe-pdf-input"
-            accept="application/pdf"
+            accept="application/pdf,image/*"
             onChange={(e) => {
               setRecipePdfFile(e.target.files[0] || null);
               setRemovePdf(false);
@@ -66,7 +66,7 @@ export default function RecipesTab({
               {recipes.find((r) => r.id === recipeForm.id)?.pdf_filename ? (
                 <div className="pdf-attached-row">
                   <span className="pdf-attached-badge">
-                    PDF attached: {recipes.find((r) => r.id === recipeForm.id)?.pdf_original_name}
+                    File attached: {recipes.find((r) => r.id === recipeForm.id)?.pdf_original_name}
                   </span>
                   <button
                     type="button"

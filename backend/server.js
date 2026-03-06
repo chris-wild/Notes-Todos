@@ -14,6 +14,7 @@ const db = require('./db');
 const { migrate } = require('./migrate');
 const s3 = require('./s3');
 const { encrypt, decrypt, hmacHash } = require('./crypto-utils');
+const { convertImageToPdf, isImageMime, IMAGE_MIME_TYPES } = require('./image-to-pdf');
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -86,30 +87,38 @@ function deleteLocalRecipePdf(filename) {
   }
 }
 
-// Multer config for PDF uploads
-// - If S3 is enabled, keep uploads in-memory and push to S3.
-// - Otherwise, fall back to local disk storage for dev.
-const storage = s3.isEnabled()
-  ? multer.memoryStorage()
-  : multer.diskStorage({
-      destination: (req, file, cb) => cb(null, UPLOADS_DIR),
-      filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, uniqueSuffix + '-' + file.originalname);
-      }
-    });
+// Multer config for recipe file uploads (PDF or image).
+// Always use memory storage so we can convert images to PDF before writing to disk/S3.
+const ALLOWED_MIME_TYPES = new Set(['application/pdf', ...IMAGE_MIME_TYPES]);
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are allowed'));
+      cb(new Error('Only PDF and image files (JPEG, PNG, WEBP, HEIC) are allowed'));
     }
   }
 });
+
+// Middleware: convert uploaded images to PDF so downstream storage/viewing is always PDF.
+const convertImageIfNeeded = async (req, res, next) => {
+  if (!req.file || !isImageMime(req.file.mimetype)) return next();
+  try {
+    const pdfBuffer = await convertImageToPdf(req.file.buffer);
+    const stem = path.basename(req.file.originalname, path.extname(req.file.originalname));
+    req.file.buffer = pdfBuffer;
+    req.file.mimetype = 'application/pdf';
+    req.file.originalname = stem + '.pdf';
+    req.file.size = pdfBuffer.length;
+    next();
+  } catch (err) {
+    console.error('[image-to-pdf] conversion failed:', err.message);
+    res.status(400).json({ error: 'Failed to convert image to PDF' });
+  }
+};
 
 // Middleware
 // In production (ECS/ALB) we typically terminate TLS at the load balancer.
@@ -972,7 +981,7 @@ async function claudeExtractIngredientsFromPdf({ pdfBuffer, recipeName, original
   throw new Error('Claude extract failed: could not parse ingredients JSON');
 }
 
-app.post('/api/recipes', authenticateToken, upload.single('pdf'), async (req, res) => {
+app.post('/api/recipes', authenticateToken, upload.single('pdf'), convertImageIfNeeded, async (req, res) => {
   const { name, notes } = req.body;
 
   if (!name) {
@@ -993,8 +1002,11 @@ app.post('/api/recipes', authenticateToken, upload.single('pdf'), async (req, re
         });
         pdfKey = uploaded.key;
       } else {
-        // diskStorage mode
-        pdfKey = req.file.filename;
+        // Write buffer to local disk
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const filename = uniqueSuffix + '-' + req.file.originalname;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer);
+        pdfKey = filename;
       }
     }
 
@@ -1015,7 +1027,7 @@ app.post('/api/recipes', authenticateToken, upload.single('pdf'), async (req, re
   }
 });
 
-app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), async (req, res) => {
+app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), convertImageIfNeeded, async (req, res) => {
   const { name, notes, remove_pdf } = req.body;
 
   if (!name) {
@@ -1057,7 +1069,10 @@ app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), async (req,
         });
         pdfKey = uploaded.key;
       } else {
-        pdfKey = req.file.filename;
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const filename = uniqueSuffix + '-' + req.file.originalname;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer);
+        pdfKey = filename;
       }
 
       pdfOriginalName = req.file.originalname;
@@ -1560,6 +1575,206 @@ app.delete('/api/v1/todos/:id', authenticateAPIKey, async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Todo not found' });
     }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================
+// API v1 Recipes endpoints (API key protected, user-scoped)
+// ============================================================
+
+app.get('/api/v1/recipes', authenticateAPIKey, async (req, res) => {
+  const { search } = req.query;
+  try {
+    if (search) {
+      const result = await db.query(
+        'SELECT * FROM recipes WHERE user_id = $1 AND (name ILIKE $2 OR notes ILIKE $2) ORDER BY updated_at DESC',
+        [req.userId, `%${search}%`]
+      );
+      return res.json(result.rows);
+    }
+    const result = await db.query(
+      'SELECT * FROM recipes WHERE user_id = $1 ORDER BY updated_at DESC',
+      [req.userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.userId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/recipes', authenticateAPIKey, upload.single('pdf'), convertImageIfNeeded, async (req, res) => {
+  const { name, notes } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Recipe name is required' });
+  }
+
+  let pdfKey = null;
+  const pdfOriginalName = req.file ? req.file.originalname : null;
+
+  try {
+    if (req.file) {
+      if (s3.isEnabled()) {
+        const uploaded = await s3.putPdf({
+          userId: req.userId,
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+          originalName: req.file.originalname
+        });
+        pdfKey = uploaded.key;
+      } else {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const filename = uniqueSuffix + '-' + req.file.originalname;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer);
+        pdfKey = filename;
+      }
+    }
+
+    const result = await db.query(
+      'INSERT INTO recipes (name, notes, pdf_filename, pdf_original_name, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [name, notes || '', pdfKey, pdfOriginalName, req.userId]
+    );
+
+    res.status(201).json({
+      id: result.rows[0].id,
+      name,
+      notes: notes || '',
+      pdf_filename: pdfKey,
+      pdf_original_name: pdfOriginalName
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/v1/recipes/:id', authenticateAPIKey, upload.single('pdf'), convertImageIfNeeded, async (req, res) => {
+  const { name, notes, remove_pdf } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Recipe name is required' });
+  }
+
+  try {
+    const existingResult = await db.query('SELECT * FROM recipes WHERE id = $1 AND user_id = $2', [
+      req.params.id,
+      req.userId
+    ]);
+
+    const existing = existingResult.rows[0];
+    if (!existing) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    let pdfKey = existing.pdf_filename;
+    let pdfOriginalName = existing.pdf_original_name;
+
+    // If a new file was uploaded, delete the old one and store the new one
+    if (req.file) {
+      if (existing.pdf_filename) {
+        if (s3.isEnabled()) {
+          s3.deleteObject(existing.pdf_filename).catch(() => {});
+        } else {
+          deleteLocalRecipePdf(existing.pdf_filename);
+        }
+      }
+
+      if (s3.isEnabled()) {
+        const uploaded = await s3.putPdf({
+          userId: req.userId,
+          buffer: req.file.buffer,
+          contentType: req.file.mimetype,
+          originalName: req.file.originalname
+        });
+        pdfKey = uploaded.key;
+      } else {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        const filename = uniqueSuffix + '-' + req.file.originalname;
+        fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer);
+        pdfKey = filename;
+      }
+
+      pdfOriginalName = req.file.originalname;
+    }
+
+    // If remove_pdf flag is set, delete the existing file
+    if (remove_pdf === 'true' && !req.file) {
+      if (existing.pdf_filename) {
+        if (s3.isEnabled()) s3.deleteObject(existing.pdf_filename).catch(() => {});
+        else deleteLocalRecipePdf(existing.pdf_filename);
+      }
+      pdfKey = null;
+      pdfOriginalName = null;
+    }
+
+    const pdfChanged = req.file || (remove_pdf === 'true' && existing.pdf_filename);
+
+    await db.query(
+      'UPDATE recipes SET name = $1, notes = $2, pdf_filename = $3, pdf_original_name = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6',
+      [name, notes || '', pdfKey, pdfOriginalName, req.params.id, req.userId]
+    );
+
+    // Clear cached ingredients if PDF changed (forces re-OCR on next create-ingredient-todos)
+    if (pdfChanged) {
+      await db.query('DELETE FROM ingredients WHERE recipe_id = $1', [req.params.id]);
+      await db.query(
+        'UPDATE recipes SET ingredient_todo_category = NULL, ingredient_todos_count = NULL, ingredient_todos_created_at = NULL, updated_at = NOW() WHERE id = $1 AND user_id = $2',
+        [req.params.id, req.userId]
+      );
+    }
+
+    res.json({
+      success: true,
+      id: req.params.id,
+      name,
+      notes: notes || '',
+      pdf_filename: pdfKey,
+      pdf_original_name: pdfOriginalName
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
+  try {
+    const rowResult = await db.query('SELECT pdf_filename FROM recipes WHERE id = $1 AND user_id = $2', [
+      req.params.id,
+      req.userId
+    ]);
+
+    const row = rowResult.rows[0];
+    if (!row) {
+      return res.status(404).json({ error: 'Recipe not found' });
+    }
+
+    if (row.pdf_filename) {
+      if (s3.isEnabled()) {
+        s3.deleteObject(row.pdf_filename).catch(() => {});
+      } else {
+        deleteLocalRecipePdf(row.pdf_filename);
+      }
+    }
+
+    await db.query('DELETE FROM recipes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
