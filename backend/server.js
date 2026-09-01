@@ -10,8 +10,7 @@ const multer = require('multer');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-const db = require('./db');
-const { migrate } = require('./migrate');
+const datastore = require('./datastore');
 const s3 = require('./s3');
 const { encrypt, decrypt, hmacHash } = require('./crypto-utils');
 const { convertImageToPdf, isImageMime, IMAGE_MIME_TYPES } = require('./image-to-pdf');
@@ -22,9 +21,10 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // JWT secret - use env var for persistence across restarts, or generate random
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
 
-// Uploads directory for recipe PDFs
+// Uploads directory for recipe PDFs (local-dev disk fallback only).
+// On Lambda/S3 the filesystem is read-only, so only create it when S3 is off.
 const UPLOADS_DIR = path.join(__dirname, 'uploads', 'recipes');
-if (!fs.existsSync(UPLOADS_DIR)) {
+if (!process.env.S3_BUCKET && !fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
@@ -162,6 +162,15 @@ app.use(helmet.noSniff());
 
 app.use(express.json());
 
+// Data is loaded from S3 at startup (async). Listen immediately so /healthz and
+// the platform readiness check pass at once, but hold /api requests until the
+// datastore has finished loading (avoids serving from an empty in-memory store).
+let dataReady = null;
+app.use('/api', (req, res, next) => {
+  if (!dataReady) return res.status(503).json({ error: 'initializing' });
+  dataReady.then(() => next(), () => res.status(503).json({ error: 'initializing' }));
+});
+
 // Password hashing
 // - New hashes: Argon2id
 // - Legacy hashes: bcrypt ($2a$/$2b$/$2y$) verified with bcryptjs
@@ -267,12 +276,7 @@ const authenticateAPIKey = async (req, res, next) => {
   }
 
   try {
-    const result = await db.query(
-      'SELECT ak.*, u.username FROM api_keys ak JOIN users u ON ak.user_id = u.id WHERE ak.key_hash = $1 AND ak.active = TRUE',
-      [hmacHash(apiKey)]
-    );
-
-    const row = result.rows[0];
+    const row = datastore.findApiKeyByHash(hmacHash(apiKey));
     if (!row) {
       return res.status(401).json({ error: 'Invalid API key' });
     }
@@ -325,19 +329,15 @@ app.post('/api/register', authLimiter, async (req, res) => {
   const normalizedUsername = username.toLowerCase().trim();
 
   try {
-    const existing = await db.query('SELECT id FROM users WHERE username = $1', [normalizedUsername]);
-    if (existing.rows[0]) {
+    const existing = datastore.getUserByUsername(normalizedUsername);
+    if (existing) {
       return res.status(409).json({ error: 'Username already taken' });
     }
 
     const hash = await hashPassword(password);
-    const inserted = await db.query(
-      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id',
-      [normalizedUsername, hash]
-    );
+    const user = await datastore.createUser(normalizedUsername, hash);
 
-    const id = inserted.rows[0].id;
-    const token = generateToken({ id, username: normalizedUsername });
+    const token = generateToken({ id: user.id, username: normalizedUsername });
     res.status(201).json({ token, username: normalizedUsername });
   } catch (err) {
     res.status(500).json({ error: 'Failed to create user' });
@@ -354,8 +354,7 @@ app.post('/api/login', authLimiter, async (req, res) => {
   const normalizedUsername = username.toLowerCase().trim();
 
   try {
-    const result = await db.query('SELECT * FROM users WHERE username = $1', [normalizedUsername]);
-    const row = result.rows[0];
+    const row = datastore.getUserByUsername(normalizedUsername);
 
     if (!row) {
       return res.status(401).json({ error: 'Invalid username or password' });
@@ -370,7 +369,7 @@ app.post('/api/login', authLimiter, async (req, res) => {
     if (isBcryptHash(row.password_hash)) {
       try {
         const upgraded = await hashPassword(password);
-        await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [upgraded, row.id]);
+        await datastore.updateUserPassword(row.id, upgraded);
       } catch (e) {
         // Best-effort: do not fail login if rehash fails.
       }
@@ -395,10 +394,9 @@ app.post('/api/reset-password', authLimiter, authenticateToken, async (req, res)
   }
 
   try {
-    const result = await db.query('SELECT password_hash FROM users WHERE id = $1', [req.userId]);
-    const row = result.rows[0];
+    const row = datastore.getUserById(req.userId);
     if (!row) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: 'User not found' });
     }
 
     const match = await verifyPassword(currentPassword, row.password_hash);
@@ -407,7 +405,7 @@ app.post('/api/reset-password', authLimiter, authenticateToken, async (req, res)
     }
 
     const newHash = await hashPassword(newPassword);
-    await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [newHash, req.userId]);
+    await datastore.updateUserPassword(req.userId, newHash);
     res.json({ success: true, message: 'Password updated successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update password' });
@@ -420,11 +418,9 @@ app.post('/api/reset-password', authLimiter, authenticateToken, async (req, res)
 
 app.get('/api/keys', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT id, key, name, active, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.userId]
-    );
-    const rows = result.rows.map((row) => ({ ...row, key: decrypt(row.key) }));
+    const rows = datastore.listApiKeys(req.userId).map((row) => ({
+      id: row.id, key: decrypt(row.key), name: row.name, active: row.active, created_at: row.created_at
+    }));
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -436,12 +432,8 @@ app.post('/api/keys', authenticateToken, async (req, res) => {
   const newKey = crypto.randomBytes(32).toString('hex');
 
   try {
-    const result = await db.query(
-      'INSERT INTO api_keys (key, key_hash, name, user_id) VALUES ($1, $2, $3, $4) RETURNING id',
-      [encrypt(newKey), hmacHash(newKey), name || 'Unnamed Key', req.userId]
-    );
-
-    res.status(201).json({ id: result.rows[0].id, key: newKey, name: name || 'Unnamed Key' });
+    const record = await datastore.createApiKey(encrypt(newKey), hmacHash(newKey), name || 'Unnamed Key', req.userId);
+    res.status(201).json({ id: record.id, key: newKey, name: name || 'Unnamed Key' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -449,8 +441,8 @@ app.post('/api/keys', authenticateToken, async (req, res) => {
 
 app.delete('/api/keys/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM api_keys WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    if (result.rowCount === 0) {
+    const deleted = await datastore.deleteApiKey(req.params.id, req.userId);
+    if (deleted === 0) {
       return res.status(404).json({ error: 'API key not found' });
     }
     res.json({ success: true });
@@ -470,8 +462,7 @@ function maskAnthropicKey(key) {
 
 app.get('/api/anthropic-key', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT anthropic_api_key FROM users WHERE id = $1', [req.userId]);
-    const raw = result.rows[0]?.anthropic_api_key;
+    const raw = datastore.getUserAnthropicKey(req.userId);
     const key = raw ? decrypt(raw) : null;
     res.json({ hasKey: !!key, maskedKey: key ? maskAnthropicKey(key) : null });
   } catch (err) {
@@ -501,7 +492,7 @@ app.put('/api/anthropic-key', authenticateToken, async (req, res) => {
   }
 
   try {
-    await db.query('UPDATE users SET anthropic_api_key = $1 WHERE id = $2', [encrypt(trimmed), req.userId]);
+    await datastore.updateUserAnthropicKey(req.userId, encrypt(trimmed));
     res.json({ success: true, maskedKey: maskAnthropicKey(trimmed) });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -510,7 +501,7 @@ app.put('/api/anthropic-key', authenticateToken, async (req, res) => {
 
 app.delete('/api/anthropic-key', authenticateToken, async (req, res) => {
   try {
-    await db.query('UPDATE users SET anthropic_api_key = NULL WHERE id = $1', [req.userId]);
+    await datastore.deleteUserAnthropicKey(req.userId);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -523,11 +514,7 @@ app.delete('/api/anthropic-key', authenticateToken, async (req, res) => {
 
 app.get('/api/notes', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT * FROM notes WHERE user_id = $1 ORDER BY pinned DESC, sort_order DESC, updated_at DESC',
-      [req.userId]
-    );
-    res.json(result.rows);
+    res.json(datastore.listNotes(req.userId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -537,12 +524,8 @@ app.post('/api/notes', authenticateToken, async (req, res) => {
   const { title, content } = req.body;
 
   try {
-    // Use timestamp ms as a default sort order so newer notes naturally float up.
-    const result = await db.query(
-      'INSERT INTO notes (title, content, user_id, sort_order) VALUES ($1, $2, $3, (EXTRACT(EPOCH FROM NOW()) * 1000)::bigint) RETURNING id, pinned, sort_order',
-      [title, content, req.userId]
-    );
-    res.json({ id: result.rows[0].id, title, content, pinned: result.rows[0].pinned, sort_order: result.rows[0].sort_order });
+    const note = await datastore.createNote(title, content, req.userId);
+    res.json({ id: note.id, title, content, pinned: note.pinned, sort_order: note.sort_order });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -552,17 +535,11 @@ app.put('/api/notes/:id', authenticateToken, async (req, res) => {
   const { title, content, pinned, sort_order } = req.body;
 
   try {
-    const result = await db.query(
-      `UPDATE notes
-       SET title = $1,
-           content = $2,
-           pinned = COALESCE($3, pinned),
-           sort_order = COALESCE($4, sort_order),
-           updated_at = NOW()
-       WHERE id = $5 AND user_id = $6`,
-      [title, content, pinned ?? null, sort_order ?? null, req.params.id, req.userId]
-    );
-    if (result.rowCount === 0) {
+    const fields = { title, content };
+    if (pinned != null) fields.pinned = pinned;
+    if (sort_order != null) fields.sort_order = sort_order;
+    const updated = await datastore.updateNote(req.params.id, req.userId, fields);
+    if (!updated) {
       return res.status(404).json({ error: 'Note not found' });
     }
     res.json({ success: true });
@@ -573,8 +550,8 @@ app.put('/api/notes/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM notes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    if (result.rowCount === 0) {
+    const deleted = await datastore.deleteNote(req.params.id, req.userId);
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Note not found' });
     }
     res.json({ success: true });
@@ -591,16 +568,7 @@ app.get('/api/todos', authenticateToken, async (req, res) => {
   const { category } = req.query;
 
   try {
-    if (category) {
-      const result = await db.query(
-        'SELECT * FROM todos WHERE user_id = $1 AND category = $2 ORDER BY created_at DESC',
-        [req.userId, category]
-      );
-      return res.json(result.rows);
-    }
-
-    const result = await db.query('SELECT * FROM todos WHERE user_id = $1 ORDER BY created_at DESC', [req.userId]);
-    res.json(result.rows);
+    res.json(datastore.listTodos(req.userId, category || null));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -612,20 +580,8 @@ const normalizeTodoCategory = (name) => (name || '').toLowerCase().trim();
 
 app.get('/api/todo-categories', authenticateToken, async (req, res) => {
   try {
-    // 1) Categories the user has explicitly created
-    const stored = await db.query(
-      'SELECT name FROM todo_categories WHERE user_id = $1 ORDER BY name',
-      [req.userId]
-    );
-
-    // 2) Categories already in-use by existing todos (backward compatibility)
-    const used = await db.query(
-      'SELECT DISTINCT category FROM todos WHERE user_id = $1 ORDER BY category',
-      [req.userId]
-    );
-
-    const storedNames = stored.rows.map((r) => r.name).filter(Boolean);
-    const usedNames = used.rows.map((r) => r.category).filter(Boolean);
+    const storedNames = datastore.listCategories(req.userId);
+    const usedNames = datastore.listUsedCategories(req.userId);
 
     // Always include defaults; then union everything unique.
     const all = [...new Set([...DEFAULT_TODO_CATEGORIES, ...storedNames, ...usedNames])]
@@ -655,10 +611,7 @@ app.post('/api/todo-categories', authenticateToken, async (req, res) => {
   }
 
   try {
-    await db.query(
-      'INSERT INTO todo_categories (name, normalized_name, user_id) VALUES ($1, $2, $3) ON CONFLICT (user_id, normalized_name) DO NOTHING',
-      [trimmed, normalized, req.userId]
-    );
+    await datastore.createCategory(trimmed, normalized, req.userId);
     res.json({ success: true, name: trimmed });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -677,24 +630,9 @@ app.delete('/api/todo-categories', authenticateToken, async (req, res) => {
   }
 
   try {
-    await db.query('BEGIN');
-
-    // Re-link todos in that category back to General.
-    await db.query(
-      "UPDATE todos SET category = 'General' WHERE user_id = $1 AND lower(category) = $2",
-      [req.userId, normalized]
-    );
-
-    // Delete stored category (if it exists).
-    await db.query(
-      'DELETE FROM todo_categories WHERE user_id = $1 AND normalized_name = $2',
-      [req.userId, normalized]
-    );
-
-    await db.query('COMMIT');
+    await datastore.deleteCategory(req.userId, normalized);
     res.json({ success: true });
   } catch (err) {
-    await db.query('ROLLBACK');
     res.status(500).json({ error: err.message });
   }
 });
@@ -704,11 +642,8 @@ app.post('/api/todos', authenticateToken, async (req, res) => {
   const cat = category || 'General';
 
   try {
-    const result = await db.query(
-      'INSERT INTO todos (text, category, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [text, cat, req.userId]
-    );
-    res.json({ id: result.rows[0].id, text, completed: false, category: cat });
+    const todo = await datastore.createTodo(text, cat, req.userId);
+    res.json({ id: todo.id, text, completed: false, category: cat });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -718,13 +653,8 @@ app.put('/api/todos/:id', authenticateToken, async (req, res) => {
   const { completed } = req.body;
 
   try {
-    const result = await db.query('UPDATE todos SET completed = $1 WHERE id = $2 AND user_id = $3', [
-      completed ? true : false,
-      req.params.id,
-      req.userId
-    ]);
-
-    if (result.rowCount === 0) {
+    const updated = await datastore.updateTodo(req.params.id, req.userId, { completed: completed ? true : false });
+    if (!updated) {
       return res.status(404).json({ error: 'Todo not found' });
     }
     res.json({ success: true });
@@ -735,8 +665,8 @@ app.put('/api/todos/:id', authenticateToken, async (req, res) => {
 
 app.delete('/api/todos/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM todos WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    if (result.rowCount === 0) {
+    const deleted = await datastore.deleteTodo(req.params.id, req.userId);
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Todo not found' });
     }
     res.json({ success: true });
@@ -751,8 +681,7 @@ app.delete('/api/todos/:id', authenticateToken, async (req, res) => {
 
 app.get('/api/recipes', authenticateToken, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM recipes WHERE user_id = $1 ORDER BY updated_at DESC', [req.userId]);
-    res.json(result.rows);
+    res.json(datastore.listRecipes(req.userId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -768,11 +697,7 @@ function streamToBuffer(stream) {
 }
 
 async function getRecipePdfBuffer({ userId, recipeId }) {
-  const result = await db.query(
-    'SELECT pdf_filename, pdf_original_name FROM recipes WHERE id = $1 AND user_id = $2',
-    [recipeId, userId]
-  );
-  const row = result.rows[0];
+  const row = datastore.getRecipe(recipeId, userId);
   if (!row || !row.pdf_filename) return null;
 
   if (s3.isEnabled()) {
@@ -974,13 +899,12 @@ app.post('/api/recipes', authenticateToken, upload.single('pdf'), convertImageIf
       }
     }
 
-    const result = await db.query(
-      'INSERT INTO recipes (name, notes, pdf_filename, pdf_original_name, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [name, notes || '', pdfKey, pdfOriginalName, req.userId]
-    );
+    const recipe = await datastore.createRecipe({
+      name, notes: notes || '', pdf_filename: pdfKey, pdf_original_name: pdfOriginalName, user_id: req.userId
+    });
 
     res.json({
-      id: result.rows[0].id,
+      id: recipe.id,
       name,
       notes: notes || '',
       pdf_filename: pdfKey,
@@ -1000,12 +924,7 @@ app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), convertImag
 
   try {
     // First, get the existing recipe to handle PDF cleanup
-    const existingResult = await db.query('SELECT * FROM recipes WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-
-    const existing = existingResult.rows[0];
+    const existing = datastore.getRecipe(req.params.id, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
@@ -1057,19 +976,16 @@ app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), convertImag
     const pdfChanged = req.file || (remove_pdf === 'true' && existing.pdf_filename);
 
     // Update recipe
-    await db.query(
-      'UPDATE recipes SET name = $1, notes = $2, pdf_filename = $3, pdf_original_name = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6',
-      [name, notes || '', pdfKey, pdfOriginalName, req.params.id, req.userId]
-    );
+    await datastore.updateRecipe(req.params.id, req.userId, {
+      name, notes: notes || '', pdf_filename: pdfKey, pdf_original_name: pdfOriginalName
+    });
 
     // Clear cached ingredients if PDF changed (forces re-OCR on next create-ingredient-todos)
     if (pdfChanged) {
-      await db.query('DELETE FROM ingredients WHERE recipe_id = $1', [req.params.id]);
-      // Also clear the recipe pointer to todos
-      await db.query(
-        'UPDATE recipes SET ingredient_todo_category = NULL, ingredient_todos_count = NULL, ingredient_todos_created_at = NULL, updated_at = NOW() WHERE id = $1 AND user_id = $2',
-        [req.params.id, req.userId]
-      );
+      await datastore.deleteIngredients(req.params.id);
+      await datastore.updateRecipe(req.params.id, req.userId, {
+        ingredient_todo_category: null, ingredient_todos_count: null, ingredient_todos_created_at: null
+      });
     }
 
     res.json({
@@ -1087,27 +1003,20 @@ app.put('/api/recipes/:id', authenticateToken, upload.single('pdf'), convertImag
 
 app.delete('/api/recipes/:id', authenticateToken, async (req, res) => {
   try {
-    // First get the recipe to clean up the PDF file
-    const rowResult = await db.query('SELECT pdf_filename FROM recipes WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-
-    const row = rowResult.rows[0];
-    if (!row) {
+    const result = await datastore.deleteRecipe(req.params.id, req.userId);
+    if (!result.found) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
 
     // Delete the PDF file if it exists
-    if (row.pdf_filename) {
+    if (result.pdf_filename) {
       if (s3.isEnabled()) {
-        s3.deleteObject(row.pdf_filename).catch(() => {});
+        s3.deleteObject(result.pdf_filename).catch(() => {});
       } else {
-        deleteLocalRecipePdf(row.pdf_filename);
+        deleteLocalRecipePdf(result.pdf_filename);
       }
     }
 
-    await db.query('DELETE FROM recipes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1126,12 +1035,7 @@ app.get(
   },
   async (req, res) => {
     try {
-      const result = await db.query(
-        'SELECT pdf_filename, pdf_original_name FROM recipes WHERE id = $1 AND user_id = $2',
-        [req.params.id, req.userId]
-      );
-
-      const row = result.rows[0];
+      const row = datastore.getRecipe(req.params.id, req.userId);
       if (!row || !row.pdf_filename) {
         return res.status(404).json({ error: 'PDF not found' });
       }
@@ -1165,12 +1069,11 @@ app.get(
 );
 
 // Create ingredient todo list from a recipe PDF (JWT protected)
-// Flow: Check DB first → if cached, use it (skip OCR) → else OCR → save to DB → create todos
+// Flow: Check datastore first → if cached, use it (skip OCR) → else OCR → save → create todos
 app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (req, res) => {
   try {
     // Resolve Anthropic API key from per-user setting
-    const userRow = await db.query('SELECT anthropic_api_key FROM users WHERE id = $1', [req.userId]);
-    const rawUserKey = userRow.rows[0]?.anthropic_api_key;
+    const rawUserKey = datastore.getUserAnthropicKey(req.userId);
     const resolvedApiKey = rawUserKey ? decrypt(rawUserKey) : null;
 
     if (!resolvedApiKey) {
@@ -1179,23 +1082,18 @@ app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (r
 
     const recipeId = req.params.id;
 
-    const recipeRes = await db.query('SELECT * FROM recipes WHERE id = $1 AND user_id = $2', [recipeId, req.userId]);
-    const recipe = recipeRes.rows[0];
+    const recipe = datastore.getRecipe(recipeId, req.userId);
     if (!recipe) return res.status(404).json({ error: 'Recipe not found' });
 
-    // STEP 1: Check if we already have cached ingredients in the DB
-    const cachedIngredientsRes = await db.query(
-      'SELECT name, quantity FROM ingredients WHERE recipe_id = $1 ORDER BY id ASC',
-      [recipeId]
-    );
-    const hasCachedIngredients = cachedIngredientsRes.rows.length > 0;
+    // STEP 1: Check if we already have cached ingredients
+    const cachedIngredients = datastore.listIngredients(recipeId);
+    const hasCachedIngredients = cachedIngredients.length > 0;
 
     let ingredients = [];
 
     if (hasCachedIngredients) {
       // Use cached ingredients - skip expensive OCR API call
-      ingredients = cachedIngredientsRes.rows.map((row) => {
-        // Return name only, or "quantity name" if quantity exists
+      ingredients = cachedIngredients.map((row) => {
         if (row.quantity && row.quantity.trim()) {
           return `${row.quantity} ${row.name}`.trim();
         }
@@ -1223,19 +1121,16 @@ app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (r
         ingredients = await claudeExtractIngredientsFromText({ text, recipeName: recipe.name, apiKey: resolvedApiKey });
       }
 
-      // STEP 3: Save extracted ingredients to DB (for future caching)
+      // STEP 3: Save extracted ingredients (for future caching)
       if (ingredients.length > 0) {
-        await db.query('DELETE FROM ingredients WHERE recipe_id = $1', [recipeId]); // Clear any stale entries
+        await datastore.deleteIngredients(recipeId); // Clear any stale entries
         for (const ing of ingredients) {
-          // Try to parse "quantity name" format, default to name only
           const match = ing.match(/^([\d\s\.\/]+(?:g|kg|ml|l|tsp|tbsp|cup|pinch|piece|slice|clove)?\s+)(.+)$/i);
           const quantity = match ? match[1].trim() : null;
           const name = match ? match[2].trim() : ing;
-          await db.query(
-            'INSERT INTO ingredients (recipe_id, name, quantity) VALUES ($1, $2, $3)',
-            [recipeId, name, quantity]
-          );
+          await datastore.addIngredient(recipeId, name, quantity);
         }
+        await datastore.saveIngredients();
       }
     }
 
@@ -1243,45 +1138,30 @@ app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (r
     const categoryName = (recipe.name || 'Recipe').trim();
     const normalized = categoryName.toLowerCase().trim();
 
-    await db.query('BEGIN');
-
     // Ensure category exists
-    await db.query(
-      'INSERT INTO todo_categories (name, normalized_name, user_id) VALUES ($1, $2, $3) ON CONFLICT (user_id, normalized_name) DO NOTHING',
-      [categoryName, normalized, req.userId]
-    );
+    await datastore.createCategory(categoryName, normalized, req.userId);
 
-    const existingTodosRes = await db.query(
-      'SELECT COUNT(*)::int AS count FROM todos WHERE user_id = $1 AND category = $2',
-      [req.userId, categoryName]
-    );
-    const existingTodos = parseInt(existingTodosRes.rows[0]?.count || '0', 10);
+    const existingTodos = datastore.countTodos(req.userId, categoryName);
 
     let inserted = existingTodos;
 
     if (hasCachedIngredients || existingTodos === 0) {
-      // Delete any existing todos for this category (so deleted items get restored from DB)
-      await db.query('DELETE FROM todos WHERE user_id = $1 AND category = $2', [req.userId, categoryName]);
+      // Delete any existing todos for this category (so deleted items get restored)
+      await datastore.deleteTodosByCategory(req.userId, categoryName);
 
       // Create fresh todos from ingredients
       inserted = 0;
       for (const ing of ingredients) {
-        await db.query('INSERT INTO todos (text, category, user_id) VALUES ($1, $2, $3)', [ing, categoryName, req.userId]);
+        await datastore.createTodo(ing, categoryName, req.userId);
         inserted++;
       }
 
       // Update the count pointer
-      await db.query(
-        'UPDATE recipes SET ingredient_todos_count = $2 WHERE id = $1 AND user_id = $3',
-        [recipeId, inserted, req.userId]
-      );
+      await datastore.updateRecipe(recipeId, req.userId, { ingredient_todos_count: inserted });
     }
-
-    await db.query('COMMIT');
 
     res.json({ ok: true, alreadyCreated: existingTodos > 0, category: categoryName, count: inserted });
   } catch (err) {
-    try { await db.query('ROLLBACK'); } catch {}
     if (err && err.code === 'AI_UNAUTHORIZED') {
       return res.status(503).json({ error: 'Anthropic API key is invalid. Update it in Admin settings.' });
     }
@@ -1291,8 +1171,7 @@ app.post('/api/recipes/:id/create-ingredient-todos', authenticateToken, async (r
 
 app.get('/api/features', authenticateToken, async (req, res) => {
   try {
-    const userRow = await db.query('SELECT anthropic_api_key FROM users WHERE id = $1', [req.userId]);
-    const hasUserKey = !!userRow.rows[0]?.anthropic_api_key;
+    const hasUserKey = !!datastore.getUserAnthropicKey(req.userId);
     res.json({ ingredientAutomation: hasUserKey });
   } catch (err) {
     res.json({ ingredientAutomation: false });
@@ -1308,15 +1187,9 @@ app.get('/api/v1/notes', authenticateAPIKey, async (req, res) => {
 
   try {
     if (search) {
-      const result = await db.query(
-        'SELECT * FROM notes WHERE user_id = $1 AND (title ILIKE $2 OR content ILIKE $2) ORDER BY updated_at DESC',
-        [req.userId, `%${search}%`]
-      );
-      return res.json(result.rows);
+      return res.json(datastore.searchNotes(req.userId, search));
     }
-
-    const result = await db.query('SELECT * FROM notes WHERE user_id = $1 ORDER BY updated_at DESC', [req.userId]);
-    res.json(result.rows);
+    res.json(datastore.listNotesByUpdated(req.userId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1324,8 +1197,7 @@ app.get('/api/v1/notes', authenticateAPIKey, async (req, res) => {
 
 app.get('/api/v1/notes/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM notes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    const row = result.rows[0];
+    const row = datastore.getNote(req.params.id, req.userId);
     if (!row) {
       return res.status(404).json({ error: 'Note not found' });
     }
@@ -1343,17 +1215,13 @@ app.post('/api/v1/notes', authenticateAPIKey, async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      'INSERT INTO notes (title, content, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [title, content || '', req.userId]
-    );
-
+    const note = await datastore.createNote(title, content || '', req.userId);
     res.status(201).json({
-      id: result.rows[0].id,
+      id: note.id,
       title,
       content: content || '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      created_at: note.created_at,
+      updated_at: note.updated_at
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1368,11 +1236,8 @@ app.put('/api/v1/notes/:id', authenticateAPIKey, async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      'UPDATE notes SET title = $1, content = $2, updated_at = NOW() WHERE id = $3 AND user_id = $4',
-      [title, content || '', req.params.id, req.userId]
-    );
-    if (result.rowCount === 0) {
+    const updated = await datastore.updateNote(req.params.id, req.userId, { title, content: content || '' });
+    if (!updated) {
       return res.status(404).json({ error: 'Note not found' });
     }
     res.json({ success: true, id: req.params.id, title, content });
@@ -1383,8 +1248,8 @@ app.put('/api/v1/notes/:id', authenticateAPIKey, async (req, res) => {
 
 app.delete('/api/v1/notes/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM notes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    if (result.rowCount === 0) {
+    const deleted = await datastore.deleteNote(req.params.id, req.userId);
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Note not found' });
     }
     res.json({ success: true });
@@ -1401,22 +1266,7 @@ app.get('/api/v1/todos', authenticateAPIKey, async (req, res) => {
   const { search, completed } = req.query;
 
   try {
-    const params = [req.userId];
-    const where = ['user_id = $1'];
-
-    if (search) {
-      params.push(`%${search}%`);
-      where.push(`text ILIKE $${params.length}`);
-    }
-
-    if (completed !== undefined) {
-      params.push(completed === 'true');
-      where.push(`completed = $${params.length}`);
-    }
-
-    const sql = `SELECT * FROM todos WHERE ${where.join(' AND ')} ORDER BY created_at DESC`;
-    const result = await db.query(sql, params);
-    res.json(result.rows);
+    res.json(datastore.searchTodos(req.userId, search, completed));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1424,8 +1274,7 @@ app.get('/api/v1/todos', authenticateAPIKey, async (req, res) => {
 
 app.get('/api/v1/todos/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('SELECT * FROM todos WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    const row = result.rows[0];
+    const row = datastore.getTodo(req.params.id, req.userId);
     if (!row) {
       return res.status(404).json({ error: 'Todo not found' });
     }
@@ -1443,16 +1292,12 @@ app.post('/api/v1/todos', authenticateAPIKey, async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      'INSERT INTO todos (text, completed, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [text, completed ? true : false, req.userId]
-    );
-
+    const todo = await datastore.createTodoWithCompleted(text, completed, req.userId);
     res.status(201).json({
-      id: result.rows[0].id,
+      id: todo.id,
       text,
-      completed: completed ? true : false,
-      created_at: new Date().toISOString()
+      completed: todo.completed,
+      created_at: todo.created_at
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1462,36 +1307,19 @@ app.post('/api/v1/todos', authenticateAPIKey, async (req, res) => {
 app.put('/api/v1/todos/:id', authenticateAPIKey, async (req, res) => {
   const { text, completed } = req.body;
 
-  const updates = [];
-  const params = [];
+  const fields = {};
+  if (text !== undefined) fields.text = text;
+  if (completed !== undefined) fields.completed = completed ? true : false;
 
-  if (text !== undefined) {
-    params.push(text);
-    updates.push(`text = $${params.length}`);
-  }
-
-  if (completed !== undefined) {
-    params.push(completed ? true : false);
-    updates.push(`completed = $${params.length}`);
-  }
-
-  if (updates.length === 0) {
+  if (Object.keys(fields).length === 0) {
     return res.status(400).json({ error: 'No fields to update' });
   }
 
-  params.push(req.params.id);
-  params.push(req.userId);
-
   try {
-    const result = await db.query(
-      `UPDATE todos SET ${updates.join(', ')} WHERE id = $${params.length - 1} AND user_id = $${params.length}`,
-      params
-    );
-
-    if (result.rowCount === 0) {
+    const updated = await datastore.updateTodo(req.params.id, req.userId, fields);
+    if (!updated) {
       return res.status(404).json({ error: 'Todo not found' });
     }
-
     res.json({ success: true, id: req.params.id });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1500,11 +1328,8 @@ app.put('/api/v1/todos/:id', authenticateAPIKey, async (req, res) => {
 
 app.patch('/api/v1/todos/:id/complete', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('UPDATE todos SET completed = TRUE WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-    if (result.rowCount === 0) {
+    const updated = await datastore.updateTodo(req.params.id, req.userId, { completed: true });
+    if (!updated) {
       return res.status(404).json({ error: 'Todo not found' });
     }
     res.json({ success: true, id: req.params.id, completed: true });
@@ -1515,11 +1340,8 @@ app.patch('/api/v1/todos/:id/complete', authenticateAPIKey, async (req, res) => 
 
 app.patch('/api/v1/todos/:id/incomplete', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('UPDATE todos SET completed = FALSE WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-    if (result.rowCount === 0) {
+    const updated = await datastore.updateTodo(req.params.id, req.userId, { completed: false });
+    if (!updated) {
       return res.status(404).json({ error: 'Todo not found' });
     }
     res.json({ success: true, id: req.params.id, completed: false });
@@ -1530,8 +1352,8 @@ app.patch('/api/v1/todos/:id/incomplete', authenticateAPIKey, async (req, res) =
 
 app.delete('/api/v1/todos/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query('DELETE FROM todos WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
-    if (result.rowCount === 0) {
+    const deleted = await datastore.deleteTodo(req.params.id, req.userId);
+    if (deleted === 0) {
       return res.status(404).json({ error: 'Todo not found' });
     }
     res.json({ success: true });
@@ -1548,17 +1370,9 @@ app.get('/api/v1/recipes', authenticateAPIKey, async (req, res) => {
   const { search } = req.query;
   try {
     if (search) {
-      const result = await db.query(
-        'SELECT * FROM recipes WHERE user_id = $1 AND (name ILIKE $2 OR notes ILIKE $2) ORDER BY updated_at DESC',
-        [req.userId, `%${search}%`]
-      );
-      return res.json(result.rows);
+      return res.json(datastore.searchRecipes(req.userId, search));
     }
-    const result = await db.query(
-      'SELECT * FROM recipes WHERE user_id = $1 ORDER BY updated_at DESC',
-      [req.userId]
-    );
-    res.json(result.rows);
+    res.json(datastore.listRecipes(req.userId));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1566,11 +1380,7 @@ app.get('/api/v1/recipes', authenticateAPIKey, async (req, res) => {
 
 app.get('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT * FROM recipes WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-    const row = result.rows[0];
+    const row = datastore.getRecipe(req.params.id, req.userId);
     if (!row) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
@@ -1608,13 +1418,12 @@ app.post('/api/v1/recipes', authenticateAPIKey, upload.single('pdf'), convertIma
       }
     }
 
-    const result = await db.query(
-      'INSERT INTO recipes (name, notes, pdf_filename, pdf_original_name, user_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [name, notes || '', pdfKey, pdfOriginalName, req.userId]
-    );
+    const recipe = await datastore.createRecipe({
+      name, notes: notes || '', pdf_filename: pdfKey, pdf_original_name: pdfOriginalName, user_id: req.userId
+    });
 
     res.status(201).json({
-      id: result.rows[0].id,
+      id: recipe.id,
       name,
       notes: notes || '',
       pdf_filename: pdfKey,
@@ -1633,12 +1442,7 @@ app.put('/api/v1/recipes/:id', authenticateAPIKey, upload.single('pdf'), convert
   }
 
   try {
-    const existingResult = await db.query('SELECT * FROM recipes WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-
-    const existing = existingResult.rows[0];
+    const existing = datastore.getRecipe(req.params.id, req.userId);
     if (!existing) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
@@ -1686,18 +1490,16 @@ app.put('/api/v1/recipes/:id', authenticateAPIKey, upload.single('pdf'), convert
 
     const pdfChanged = req.file || (remove_pdf === 'true' && existing.pdf_filename);
 
-    await db.query(
-      'UPDATE recipes SET name = $1, notes = $2, pdf_filename = $3, pdf_original_name = $4, updated_at = NOW() WHERE id = $5 AND user_id = $6',
-      [name, notes || '', pdfKey, pdfOriginalName, req.params.id, req.userId]
-    );
+    await datastore.updateRecipe(req.params.id, req.userId, {
+      name, notes: notes || '', pdf_filename: pdfKey, pdf_original_name: pdfOriginalName
+    });
 
     // Clear cached ingredients if PDF changed (forces re-OCR on next create-ingredient-todos)
     if (pdfChanged) {
-      await db.query('DELETE FROM ingredients WHERE recipe_id = $1', [req.params.id]);
-      await db.query(
-        'UPDATE recipes SET ingredient_todo_category = NULL, ingredient_todos_count = NULL, ingredient_todos_created_at = NULL, updated_at = NOW() WHERE id = $1 AND user_id = $2',
-        [req.params.id, req.userId]
-      );
+      await datastore.deleteIngredients(req.params.id);
+      await datastore.updateRecipe(req.params.id, req.userId, {
+        ingredient_todo_category: null, ingredient_todos_count: null, ingredient_todos_created_at: null
+      });
     }
 
     res.json({
@@ -1715,25 +1517,19 @@ app.put('/api/v1/recipes/:id', authenticateAPIKey, upload.single('pdf'), convert
 
 app.delete('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
   try {
-    const rowResult = await db.query('SELECT pdf_filename FROM recipes WHERE id = $1 AND user_id = $2', [
-      req.params.id,
-      req.userId
-    ]);
-
-    const row = rowResult.rows[0];
-    if (!row) {
+    const result = await datastore.deleteRecipe(req.params.id, req.userId);
+    if (!result.found) {
       return res.status(404).json({ error: 'Recipe not found' });
     }
 
-    if (row.pdf_filename) {
+    if (result.pdf_filename) {
       if (s3.isEnabled()) {
-        s3.deleteObject(row.pdf_filename).catch(() => {});
+        s3.deleteObject(result.pdf_filename).catch(() => {});
       } else {
-        deleteLocalRecipePdf(row.pdf_filename);
+        deleteLocalRecipePdf(result.pdf_filename);
       }
     }
 
-    await db.query('DELETE FROM recipes WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1742,12 +1538,7 @@ app.delete('/api/v1/recipes/:id', authenticateAPIKey, async (req, res) => {
 
 app.get('/api/v1/recipes/:id/pdf', authenticateAPIKey, async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT pdf_filename, pdf_original_name FROM recipes WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
-    );
-
-    const row = result.rows[0];
+    const row = datastore.getRecipe(req.params.id, req.userId);
     if (!row || !row.pdf_filename) {
       return res.status(404).json({ error: 'PDF not found' });
     }
@@ -1780,11 +1571,14 @@ app.get('/api/v1/recipes/:id/pdf', authenticateAPIKey, async (req, res) => {
 });
 
 async function start() {
-  await migrate();
-
+  // Kick off the S3 data load, but don't block listening on it — the /api gate
+  // above waits for this promise before serving data requests.
+  dataReady = datastore.init();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  await dataReady;
+  console.log('Datastore ready');
 }
 
 start().catch((err) => {
