@@ -119,7 +119,7 @@ Code changes: listen before the S3 data load and gate `/api` on readiness
 (cold-start fix); await the previously fire-and-forget password write; guard the
 uploads mkdir behind `!S3_BUCKET` (read-only FS on Lambda).
 
-Deploy with `deploy/deploy-lambda.sh`.
+Deploy with `deploy/deploy.sh`.
 
 ### Teardown pending (once authenticated flows are confirmed)
 ECS service `notes-todos-svc`, cluster `notes-todos`, ALB `notes-todos-alb`,

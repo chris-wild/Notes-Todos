@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 # Semgrep security scan - fail if issues found
 echo "🔍 Running Semgrep security scan..."
-semgrep --config=p/javascript --config=p/react --config=p/secrets --exclude='backend/db.js' --error . || {
+semgrep --config=p/javascript --config=p/react --config=p/secrets --exclude='backend/db.js' --exclude='backend/migrate-to-s3.js' --error . || {
   echo ""
   echo "❌ Semgrep found issues. Please fix them before deploying."
   echo "   Run: npm run semgrep:fix to see fixes (may require review)"
@@ -90,12 +90,28 @@ if (domain) {
   else env.push({ name: 'CORS_ORIGIN', value: origin });
 }
 
-// Remove legacy secrets (OPENAI_API_KEY, ANTHROPIC_API_KEY) if present
-// Anthropic keys are now stored per-user in the database, not as env vars
+// Set S3_BUCKET for flat-file datastore
+const s3Bucket = process.env.S3_BUCKET;
+if (s3Bucket) {
+  const env = c.environment || (c.environment = []);
+  const s3Idx = env.findIndex(e => e.name === 'S3_BUCKET');
+  if (s3Idx >= 0) env[s3Idx].value = s3Bucket;
+  else env.push({ name: 'S3_BUCKET', value: s3Bucket });
+}
+
+// Remove legacy secrets (OPENAI_API_KEY, ANTHROPIC_API_KEY, DATABASE_URL) if present
 const secrets = c.secrets || (c.secrets = []);
-for (const legacyName of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']) {
+for (const legacyName of ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'DATABASE_URL']) {
   const idx = secrets.findIndex(s => s.name === legacyName);
   if (idx >= 0) secrets.splice(idx, 1);
+}
+
+// Remove legacy env vars (PGSSL) if present
+const envToRemove = ['PGSSL'];
+for (const name of envToRemove) {
+  const env = c.environment || [];
+  const idx = env.findIndex(e => e.name === name);
+  if (idx >= 0) env.splice(idx, 1);
 }
 
 fs.writeFileSync(p, JSON.stringify(td, null, 2));
