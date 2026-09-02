@@ -163,7 +163,15 @@ export default function NotesTab({
 
       {/* Note modal */}
       {noteModalOpen && (
-        <div className="keep-modal-overlay" onClick={closeModal}>
+        <div
+          className="keep-modal-overlay"
+          onMouseDown={(e) => {
+            // Close only when the press starts on the backdrop itself. A text
+            // selection that drags out of the note starts inside it, so it
+            // won't match and the note stays open.
+            if (e.target === e.currentTarget) closeModal();
+          }}
+        >
           <div className="keep-modal" onClick={(e) => e.stopPropagation()}>
             <div className="keep-modal-actions keep-modal-actions-top">
               <button
