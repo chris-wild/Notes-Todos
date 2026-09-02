@@ -104,7 +104,7 @@ export default function TodosTab({
       {todoCategoryUiError && <div className="todo-cat-error">{todoCategoryUiError}</div>}
 
       {confirmDeleteCategory && (
-        <div className="keep-modal-overlay" onClick={() => setConfirmDeleteCategory(null)}>
+        <div className="keep-modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmDeleteCategory(null); }}>
           <div className="keep-modal todo-confirm-modal" onClick={(e) => e.stopPropagation()}>
             <div className="todo-confirm-title">Delete category?</div>
             <div className="todo-confirm-body">

@@ -2,7 +2,7 @@ import React from 'react';
 
 export default function ClaudeModal({ onClose }) {
   return (
-    <div className="admin-overlay" onClick={onClose}>
+    <div className="admin-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="admin-panel about-panel" onClick={(e) => e.stopPropagation()}>
         <div className="admin-panel-header">
           <h2>Claude</h2>
