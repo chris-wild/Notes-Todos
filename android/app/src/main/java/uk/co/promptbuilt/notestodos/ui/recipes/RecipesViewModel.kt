@@ -150,8 +150,9 @@ class RecipesViewModel(
 
     /** Validates against the live API before storing, like PUT /api/anthropic-key. */
     fun saveAnthropicKey(key: String, onResult: (Boolean) -> Unit) {
-        val trimmed = key.trim()
-        if (trimmed.isEmpty()) {
+        // Keys never contain whitespace; strip anything a keyboard/paste snuck in.
+        val cleaned = key.filterNot { it.isWhitespace() }
+        if (cleaned.isEmpty()) {
             message.value = "Enter an API key"
             onResult(false)
             return
@@ -159,12 +160,13 @@ class RecipesViewModel(
         viewModelScope.launch {
             working.value = "Checking API key…"
             try {
-                if (anthropicClient.validateKey(trimmed)) {
-                    secureKeys.setAnthropicKey(trimmed)
+                val failure = anthropicClient.validateKey(cleaned)
+                if (failure == null) {
+                    secureKeys.setAnthropicKey(cleaned)
                     message.value = "Anthropic API key saved"
                     onResult(true)
                 } else {
-                    message.value = "That API key was rejected by the Anthropic API"
+                    message.value = "Key rejected by the Anthropic API ($failure)"
                     onResult(false)
                 }
             } catch (e: Exception) {

@@ -30,15 +30,28 @@ class AnthropicClient(
         .build(),
 ) {
 
-    /** Live-checks a key against GET /v1/models (port of server.js:483). */
-    suspend fun validateKey(apiKey: String): Boolean = withContext(Dispatchers.IO) {
+    /**
+     * Live-checks a key against GET /v1/models (port of server.js:483).
+     * Returns null on success, or a human-readable reason on failure.
+     */
+    suspend fun validateKey(apiKey: String): String? = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("https://api.anthropic.com/v1/models")
             .header("x-api-key", apiKey)
             .header("anthropic-version", ANTHROPIC_VERSION)
             .get()
             .build()
-        http.newCall(request).execute().use { it.isSuccessful }
+        http.newCall(request).execute().use { response ->
+            if (response.isSuccessful) return@withContext null
+            val apiMessage = try {
+                val body = response.body?.string().orEmpty()
+                ((Json.parseToJsonElement(body).jsonObject["error"] as? JsonObject)
+                    ?.get("message") as? JsonPrimitive)?.content
+            } catch (_: Exception) {
+                null
+            }
+            "HTTP ${response.code}${apiMessage?.let { ": $it" } ?: ""}"
+        }
     }
 
     suspend fun extractIngredientsFromText(text: String, recipeName: String, apiKey: String): List<String> {
