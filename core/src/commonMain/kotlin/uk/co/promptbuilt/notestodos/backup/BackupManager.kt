@@ -1,29 +1,27 @@
 package uk.co.promptbuilt.notestodos.backup
 
-import android.content.Context
-import android.net.Uri
-import kotlinx.coroutines.Dispatchers
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withContext
-import uk.co.promptbuilt.notestodos.data.RecipeFiles
+import uk.co.promptbuilt.notestodos.data.RecipeStore
 import uk.co.promptbuilt.notestodos.data.db.AppDatabase
 
 data class ImportSummary(val notes: Int, val todos: Int, val categories: Int, val recipes: Int, val ingredients: Int, val pdfs: Int)
 
+/**
+ * Bytes-in/bytes-out backup. Platform shells feed it: Android's SAF shim
+ * streams Uris, iOS's fileExporter/fileImporter hand Data across directly.
+ */
 class BackupManager(
-    private val context: Context,
     private val db: AppDatabase,
-    private val recipeFiles: RecipeFiles,
+    private val recipeStore: RecipeStore,
 ) {
 
-    suspend fun exportTo(uri: Uri) = withContext(Dispatchers.IO) {
+    suspend fun exportBytes(): ByteArray {
         val recipes = db.recipeDao().observeAll().first()
         val ingredients = recipes.flatMap { db.ingredientDao().getForRecipe(it.id) }
         val pdfs = recipes.mapNotNull { it.pdfFileName }
-            .mapNotNull { name ->
-                val file = recipeFiles.fileFor(name)
-                if (file.exists()) name to file.readBytes() else null
-            }
+            .mapNotNull { name -> recipeStore.read(name)?.let { name to it } }
             .toMap()
         val data = BackupData(
             notes = db.noteDao().observeAll().first(),
@@ -33,26 +31,34 @@ class BackupManager(
             ingredients = ingredients,
             pdfs = pdfs,
         )
-        context.contentResolver.openOutputStream(uri)?.use { BackupCodec.write(data, it) }
-            ?: throw IllegalStateException("Could not open destination for writing")
+        return BackupCodec.write(data)
     }
 
     /** Replaces ALL app data with the backup's contents. */
-    suspend fun importFrom(uri: Uri): ImportSummary = withContext(Dispatchers.IO) {
-        val data = context.contentResolver.openInputStream(uri)?.use { BackupCodec.read(it) }
-            ?: throw IllegalStateException("Could not open backup for reading")
+    suspend fun importBytes(bytes: ByteArray): ImportSummary {
+        val data = BackupCodec.read(bytes)
 
-        db.clearAllTables()
-        recipeFiles.clearAll()
+        // Wipe-and-load in one transaction, children first, via DAO deletes
+        // (clearAllTables is Android-only and skips invalidation on some paths).
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                db.ingredientDao().deleteAll()
+                db.recipeDao().deleteAll()
+                db.todoDao().deleteAll()
+                db.todoCategoryDao().deleteAll()
+                db.noteDao().deleteAll()
 
-        db.noteDao().insertAll(data.notes)
-        db.todoCategoryDao().insertAll(data.categories)
-        db.todoDao().insertAll(data.todos)
-        db.recipeDao().insertAll(data.recipes)
-        db.ingredientDao().insertAll(data.ingredients)
-        for ((name, bytes) in data.pdfs) recipeFiles.fileFor(name).writeBytes(bytes)
+                db.noteDao().insertAll(data.notes)
+                db.todoCategoryDao().insertAll(data.categories)
+                db.todoDao().insertAll(data.todos)
+                db.recipeDao().insertAll(data.recipes)
+                db.ingredientDao().insertAll(data.ingredients)
+            }
+        }
+        recipeStore.clearAll()
+        for ((name, pdfBytes) in data.pdfs) recipeStore.write(name, pdfBytes)
 
-        ImportSummary(
+        return ImportSummary(
             notes = data.notes.size,
             todos = data.todos.size,
             categories = data.categories.size,

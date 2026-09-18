@@ -25,6 +25,9 @@ interface RecipeDao {
 
     @Query("DELETE FROM recipes WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("DELETE FROM recipes")
+    suspend fun deleteAll()
 }
 
 @Dao
@@ -37,4 +40,7 @@ interface IngredientDao {
 
     @Query("DELETE FROM ingredients WHERE recipeId = :recipeId")
     suspend fun deleteForRecipe(recipeId: Long)
+
+    @Query("DELETE FROM ingredients")
+    suspend fun deleteAll()
 }

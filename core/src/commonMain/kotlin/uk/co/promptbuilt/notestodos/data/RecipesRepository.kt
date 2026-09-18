@@ -1,6 +1,7 @@
 package uk.co.promptbuilt.notestodos.data
 
-import androidx.room.withTransaction
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import kotlinx.coroutines.flow.Flow
 import uk.co.promptbuilt.notestodos.data.db.AppDatabase
 import uk.co.promptbuilt.notestodos.data.db.IngredientDao
@@ -19,7 +20,7 @@ class RecipesRepository(
     suspend fun getById(id: Long): RecipeEntity? = recipeDao.getById(id)
 
     suspend fun create(name: String, notes: String): Long {
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         return recipeDao.insert(
             RecipeEntity(name = name, notes = notes, createdAt = now, updatedAt = now),
         )
@@ -27,7 +28,7 @@ class RecipesRepository(
 
     suspend fun update(id: Long, name: String, notes: String) {
         val recipe = recipeDao.getById(id) ?: return
-        recipeDao.update(recipe.copy(name = name, notes = notes, updatedAt = System.currentTimeMillis()))
+        recipeDao.update(recipe.copy(name = name, notes = notes, updatedAt = nowMillis()))
     }
 
     /** Attachment file lifecycle (writing/deleting the PDF in filesDir/recipes/) is handled by the caller. */
@@ -37,7 +38,7 @@ class RecipesRepository(
             recipe.copy(
                 pdfFileName = pdfFileName,
                 pdfOriginalName = pdfOriginalName,
-                updatedAt = System.currentTimeMillis(),
+                updatedAt = nowMillis(),
             ),
         )
     }
@@ -49,9 +50,11 @@ class RecipesRepository(
 
     /** Replaces the cached extraction result for a recipe. */
     suspend fun replaceIngredients(recipeId: Long, ingredients: List<IngredientEntity>) {
-        db.withTransaction {
-            ingredientDao.deleteForRecipe(recipeId)
-            ingredientDao.insertAll(ingredients)
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                ingredientDao.deleteForRecipe(recipeId)
+                ingredientDao.insertAll(ingredients)
+            }
         }
     }
 
@@ -62,7 +65,7 @@ class RecipesRepository(
             recipe.copy(
                 ingredientTodoCategory = todoCategory,
                 ingredientTodosCount = count,
-                ingredientTodosCreatedAt = System.currentTimeMillis(),
+                ingredientTodosCreatedAt = nowMillis(),
             ),
         )
     }

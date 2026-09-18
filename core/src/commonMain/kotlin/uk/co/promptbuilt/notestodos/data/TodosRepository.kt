@@ -1,6 +1,7 @@
 package uk.co.promptbuilt.notestodos.data
 
-import androidx.room.withTransaction
+import androidx.room.immediateTransaction
+import androidx.room.useWriterConnection
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import uk.co.promptbuilt.notestodos.data.db.AppDatabase
@@ -28,7 +29,7 @@ class TodosRepository(
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
         return todoDao.insert(
-            TodoEntity(text = trimmed, category = category, createdAt = System.currentTimeMillis()),
+            TodoEntity(text = trimmed, category = category, createdAt = nowMillis()),
         )
     }
 
@@ -51,7 +52,7 @@ class TodosRepository(
             TodoCategoryEntity(
                 name = trimmed,
                 normalizedName = normalized,
-                createdAt = System.currentTimeMillis(),
+                createdAt = nowMillis(),
             ),
         )
         return true
@@ -63,9 +64,11 @@ class TodosRepository(
      */
     suspend fun deleteCategory(name: String): Boolean {
         if (CategoryRules.isDefault(name)) return false
-        db.withTransaction {
-            todoDao.reassignCategory(from = name, to = CategoryDefaults.GENERAL)
-            categoryDao.deleteByNormalizedName(CategoryRules.normalize(name))
+        db.useWriterConnection { transactor ->
+            transactor.immediateTransaction {
+                todoDao.reassignCategory(from = name, to = CategoryDefaults.GENERAL)
+                categoryDao.deleteByNormalizedName(CategoryRules.normalize(name))
+            }
         }
         return true
     }

@@ -1,13 +1,11 @@
 package uk.co.promptbuilt.notestodos.data
 
-import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 enum class ViewMode(val key: String) {
     Grid("grid"),
@@ -18,23 +16,27 @@ enum class ViewMode(val key: String) {
     }
 }
 
-// Replaces the web app's localStorage keys 'noteSort' and 'viewMode'.
-class SettingsRepository(private val context: Context) {
+/**
+ * App settings on Preferences DataStore. The store is built per platform
+ * (see createSettingsDataStore) — on Android at the exact path the pre-KMP
+ * app used, so existing settings survive.
+ */
+class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     private val noteSortKey = stringPreferencesKey("noteSort")
     private val viewModeKey = stringPreferencesKey("viewMode")
 
     val noteSort: Flow<NoteSort> =
-        context.settingsDataStore.data.map { NoteSort.fromKey(it[noteSortKey]) }
+        dataStore.data.map { NoteSort.fromKey(it[noteSortKey]) }
 
     val viewMode: Flow<ViewMode> =
-        context.settingsDataStore.data.map { ViewMode.fromKey(it[viewModeKey]) }
+        dataStore.data.map { ViewMode.fromKey(it[viewModeKey]) }
 
     suspend fun setNoteSort(sort: NoteSort) {
-        context.settingsDataStore.edit { it[noteSortKey] = sort.key }
+        dataStore.edit { it[noteSortKey] = sort.key }
     }
 
     suspend fun setViewMode(mode: ViewMode) {
-        context.settingsDataStore.edit { it[viewModeKey] = mode.key }
+        dataStore.edit { it[viewModeKey] = mode.key }
     }
 }

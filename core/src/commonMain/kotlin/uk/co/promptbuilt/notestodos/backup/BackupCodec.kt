@@ -1,11 +1,7 @@
 package uk.co.promptbuilt.notestodos.backup
 
-import java.io.InputStream
-import java.io.OutputStream
-import java.time.Instant
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -43,47 +39,29 @@ data class BackupData(
  */
 object BackupCodec {
 
-    fun write(data: BackupData, output: OutputStream) {
-        ZipOutputStream(output).use { zip ->
-            fun entry(name: String, bytes: ByteArray) {
-                zip.putNextEntry(ZipEntry(name))
-                zip.write(bytes)
-                zip.closeEntry()
-            }
-            entry("data/notes.json", notesJson(data.notes).toString().toByteArray())
-            entry("data/todos.json", todosJson(data.todos).toString().toByteArray())
-            entry("data/todo-categories.json", categoriesJson(data.categories).toString().toByteArray())
-            entry("data/recipes.json", recipesJson(data.recipes).toString().toByteArray())
-            entry("data/ingredients.json", ingredientsJson(data.ingredients).toString().toByteArray())
-            for ((name, bytes) in data.pdfs) entry("recipes/$name", bytes)
-        }
+    fun write(data: BackupData): ByteArray {
+        val entries = LinkedHashMap<String, ByteArray>()
+        entries["data/notes.json"] = notesJson(data.notes).toString().encodeToByteArray()
+        entries["data/todos.json"] = todosJson(data.todos).toString().encodeToByteArray()
+        entries["data/todo-categories.json"] = categoriesJson(data.categories).toString().encodeToByteArray()
+        entries["data/recipes.json"] = recipesJson(data.recipes).toString().encodeToByteArray()
+        entries["data/ingredients.json"] = ingredientsJson(data.ingredients).toString().encodeToByteArray()
+        for ((name, bytes) in data.pdfs) entries["recipes/$name"] = bytes
+        return ZipCodec.write(entries)
     }
 
-    fun read(input: InputStream): BackupData {
-        var notes: List<NoteEntity> = emptyList()
-        var todos: List<TodoEntity> = emptyList()
-        var categories: List<TodoCategoryEntity> = emptyList()
-        var recipes: List<RecipeEntity> = emptyList()
-        var ingredients: List<IngredientEntity> = emptyList()
-        val pdfs = mutableMapOf<String, ByteArray>()
-
-        ZipInputStream(input).use { zip ->
-            var entry: ZipEntry? = zip.nextEntry
-            while (entry != null) {
-                val name = entry.name
-                when {
-                    name == "data/notes.json" -> notes = parseNotes(zip.readBytes())
-                    name == "data/todos.json" -> todos = parseTodos(zip.readBytes())
-                    name == "data/todo-categories.json" -> categories = parseCategories(zip.readBytes())
-                    name == "data/recipes.json" -> recipes = parseRecipes(zip.readBytes())
-                    name == "data/ingredients.json" -> ingredients = parseIngredients(zip.readBytes())
-                    name.startsWith("recipes/") && !entry.isDirectory ->
-                        pdfs[name.substringAfterLast('/')] = zip.readBytes()
-                }
-                entry = zip.nextEntry
-            }
-        }
-        return BackupData(notes, todos, categories, recipes, ingredients, pdfs)
+    fun read(bytes: ByteArray): BackupData {
+        val entries = ZipCodec.read(bytes)
+        val pdfs = entries.filterKeys { it.startsWith("recipes/") }
+            .mapKeys { (name, _) -> name.substringAfterLast('/') }
+        return BackupData(
+            notes = entries["data/notes.json"]?.let(::parseNotes) ?: emptyList(),
+            todos = entries["data/todos.json"]?.let(::parseTodos) ?: emptyList(),
+            categories = entries["data/todo-categories.json"]?.let(::parseCategories) ?: emptyList(),
+            recipes = entries["data/recipes.json"]?.let(::parseRecipes) ?: emptyList(),
+            ingredients = entries["data/ingredients.json"]?.let(::parseIngredients) ?: emptyList(),
+            pdfs = pdfs,
+        )
     }
 
     // ---- export ----
@@ -218,7 +196,8 @@ object BackupCodec {
 
     // ---- helpers ----
 
-    private fun iso(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis).toString()
+    @OptIn(ExperimentalTime::class)
+    private fun iso(epochMillis: Long): String = Instant.fromEpochMilliseconds(epochMillis).toString()
 
     private fun objects(bytes: ByteArray): List<JsonObject> =
         Json.parseToJsonElement(bytes.decodeToString()).jsonArray.filterIsInstance<JsonObject>()
@@ -251,12 +230,13 @@ object BackupCodec {
     /** Accepts ISO-8601 strings or epoch millis; missing/invalid -> 0. */
     private fun JsonObject.time(key: String): Long = timeOrNull(key) ?: 0L
 
+    @OptIn(ExperimentalTime::class)
     private fun JsonObject.timeOrNull(key: String): Long? {
         val p = prim(key) ?: return null
         if (p is JsonNull) return null
         p.content.toLongOrNull()?.let { return it }
         return try {
-            Instant.parse(p.content).toEpochMilli()
+            Instant.parse(p.content).toEpochMilliseconds()
         } catch (_: Exception) {
             null
         }

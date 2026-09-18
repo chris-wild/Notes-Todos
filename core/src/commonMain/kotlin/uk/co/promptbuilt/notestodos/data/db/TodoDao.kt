@@ -33,4 +33,7 @@ interface TodoDao {
 
     @Query("DELETE FROM todos WHERE id = :id")
     suspend fun delete(id: Long)
+
+    @Query("DELETE FROM todos")
+    suspend fun deleteAll()
 }

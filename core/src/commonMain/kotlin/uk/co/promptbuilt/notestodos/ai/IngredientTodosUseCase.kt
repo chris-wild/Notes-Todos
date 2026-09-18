@@ -1,7 +1,8 @@
 package uk.co.promptbuilt.notestodos.ai
 
-import uk.co.promptbuilt.notestodos.data.RecipeFiles
+import uk.co.promptbuilt.notestodos.data.RecipeStore
 import uk.co.promptbuilt.notestodos.data.RecipesRepository
+import uk.co.promptbuilt.notestodos.data.nowMillis
 import uk.co.promptbuilt.notestodos.data.SecureKeys
 import uk.co.promptbuilt.notestodos.data.TodosRepository
 import uk.co.promptbuilt.notestodos.data.db.IngredientEntity
@@ -14,7 +15,7 @@ import uk.co.promptbuilt.notestodos.data.db.IngredientEntity
 class IngredientTodosUseCase(
     private val recipes: RecipesRepository,
     private val todos: TodosRepository,
-    private val recipeFiles: RecipeFiles,
+    private val recipeStore: RecipeStore,
     private val client: AnthropicClient,
     private val secureKeys: SecureKeys,
 ) {
@@ -36,9 +37,9 @@ class IngredientTodosUseCase(
             }
         } else {
             val extracted = if (recipe.pdfFileName != null) {
-                val file = recipeFiles.fileFor(recipe.pdfFileName)
-                if (!file.exists()) throw IllegalStateException("PDF not found")
-                client.extractIngredientsFromPdf(file.readBytes(), recipe.name, apiKey)
+                val bytes = recipeStore.read(recipe.pdfFileName)
+                    ?: throw IllegalStateException("PDF not found")
+                client.extractIngredientsFromPdf(bytes, recipe.name, apiKey)
             } else {
                 val text = recipe.notes.trim()
                 if (text.isEmpty()) {
@@ -47,7 +48,7 @@ class IngredientTodosUseCase(
                 client.extractIngredientsFromText(text, recipe.name, apiKey)
             }
             if (extracted.isNotEmpty()) {
-                val now = System.currentTimeMillis()
+                val now = nowMillis()
                 recipes.replaceIngredients(
                     recipeId,
                     extracted.map { ing ->

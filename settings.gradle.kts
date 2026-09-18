@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "HobPad"
 include(":app")
+include(":core")

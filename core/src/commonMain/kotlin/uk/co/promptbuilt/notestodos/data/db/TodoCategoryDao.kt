@@ -21,4 +21,7 @@ interface TodoCategoryDao {
 
     @Query("DELETE FROM todo_categories WHERE normalizedName = :normalizedName")
     suspend fun deleteByNormalizedName(normalizedName: String)
+
+    @Query("DELETE FROM todo_categories")
+    suspend fun deleteAll()
 }

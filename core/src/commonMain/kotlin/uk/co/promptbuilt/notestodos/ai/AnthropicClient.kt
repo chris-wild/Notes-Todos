@@ -1,9 +1,7 @@
 package uk.co.promptbuilt.notestodos.ai
 
-import android.util.Base64
-import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -12,46 +10,36 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 
 class AiUnauthorizedException(message: String) : Exception(message)
 
 /**
- * Direct port of the server's Anthropic Messages calls (backend/server.js:720-871):
- * same model, prompts, prefill trick, and error mapping. This is the app's ONLY
- * outbound network dependency.
+ * Direct port of the retired server's Anthropic Messages calls: same model,
+ * prompts, prefill trick, and error mapping. This is the app's ONLY outbound
+ * network dependency, riding the platform httpSend seam.
  */
-class AnthropicClient(
-    private val http: OkHttpClient = OkHttpClient.Builder()
-        .callTimeout(120, TimeUnit.SECONDS)
-        .build(),
-) {
+class AnthropicClient {
 
-    /**
-     * Live-checks a key against GET /v1/models (port of server.js:483).
-     * Returns null on success, or a human-readable reason on failure.
-     */
-    suspend fun validateKey(apiKey: String): String? = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("https://api.anthropic.com/v1/models")
-            .header("x-api-key", apiKey)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .get()
-            .build()
-        http.newCall(request).execute().use { response ->
-            if (response.isSuccessful) return@withContext null
-            val apiMessage = try {
-                val body = response.body?.string().orEmpty()
-                ((Json.parseToJsonElement(body).jsonObject["error"] as? JsonObject)
-                    ?.get("message") as? JsonPrimitive)?.content
-            } catch (_: Exception) {
-                null
-            }
-            "HTTP ${response.code}${apiMessage?.let { ": $it" } ?: ""}"
+    /** Returns null on success, or a human-readable reason on failure. */
+    suspend fun validateKey(apiKey: String): String? {
+        val reply = httpSend(
+            method = "GET",
+            url = "https://api.anthropic.com/v1/models",
+            headers = mapOf(
+                "x-api-key" to apiKey,
+                "anthropic-version" to ANTHROPIC_VERSION,
+            ),
+            body = null,
+            timeoutSeconds = 30,
+        )
+        if (reply.status in 200..299) return null
+        val apiMessage = try {
+            ((Json.parseToJsonElement(reply.body).jsonObject["error"] as? JsonObject)
+                ?.get("message") as? JsonPrimitive)?.content
+        } catch (_: Exception) {
+            null
         }
+        return "HTTP ${reply.status}${apiMessage?.let { ": $it" } ?: ""}"
     }
 
     suspend fun extractIngredientsFromText(text: String, recipeName: String, apiKey: String): List<String> {
@@ -86,8 +74,9 @@ class AnthropicClient(
         return IngredientParsing.parseResponse("{" + complete(body, apiKey))
     }
 
+    @OptIn(ExperimentalEncodingApi::class)
     suspend fun extractIngredientsFromPdf(pdfBytes: ByteArray, recipeName: String, apiKey: String): List<String> {
-        val base64 = Base64.encodeToString(pdfBytes, Base64.NO_WRAP)
+        val base64 = Base64.encode(pdfBytes)
         val body = buildJsonObject {
             put("model", MODEL)
             put("max_tokens", 2048)
@@ -144,32 +133,34 @@ class AnthropicClient(
     }
 
     /** POSTs a Messages request and returns content[0].text. */
-    private suspend fun complete(body: JsonObject, apiKey: String): String = withContext(Dispatchers.IO) {
-        val request = Request.Builder()
-            .url("https://api.anthropic.com/v1/messages")
-            .header("x-api-key", apiKey)
-            .header("anthropic-version", ANTHROPIC_VERSION)
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
-            .build()
-        http.newCall(request).execute().use { response ->
-            val responseText = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                val message = try {
-                    (Json.parseToJsonElement(responseText).jsonObject["error"] as? JsonObject)
-                        ?.get("message")?.let { (it as? JsonPrimitive)?.content }
-                } catch (_: Exception) {
-                    null
-                } ?: responseText
-                if (response.code == 401 || response.code == 403) {
-                    throw AiUnauthorizedException("Anthropic API key is invalid. Update it in Settings.")
-                }
-                throw IllegalStateException("Claude extract failed: ${response.code} $message")
+    private suspend fun complete(body: JsonObject, apiKey: String): String {
+        val reply = httpSend(
+            method = "POST",
+            url = "https://api.anthropic.com/v1/messages",
+            headers = mapOf(
+                "x-api-key" to apiKey,
+                "anthropic-version" to ANTHROPIC_VERSION,
+                "Content-Type" to "application/json",
+            ),
+            body = body.toString(),
+            timeoutSeconds = 120,
+        )
+        if (reply.status !in 200..299) {
+            val message = try {
+                ((Json.parseToJsonElement(reply.body).jsonObject["error"] as? JsonObject)
+                    ?.get("message") as? JsonPrimitive)?.content
+            } catch (_: Exception) {
+                null
+            } ?: reply.body
+            if (reply.status == 401 || reply.status == 403) {
+                throw AiUnauthorizedException("Anthropic API key is invalid. Update it in Settings.")
             }
-            val content = Json.parseToJsonElement(responseText).jsonObject["content"] as? JsonArray
-            (content?.firstOrNull() as? JsonObject)?.get("text")
-                ?.let { (it as? JsonPrimitive)?.content }
-                .orEmpty()
+            throw IllegalStateException("Claude extract failed: ${reply.status} $message")
         }
+        val content = Json.parseToJsonElement(reply.body).jsonObject["content"] as? JsonArray
+        return (content?.firstOrNull() as? JsonObject)?.get("text")
+            ?.let { (it as? JsonPrimitive)?.content }
+            .orEmpty()
     }
 
     private companion object {

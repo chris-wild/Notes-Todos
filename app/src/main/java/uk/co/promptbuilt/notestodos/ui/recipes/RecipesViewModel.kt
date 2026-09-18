@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
 import uk.co.promptbuilt.notestodos.ai.AnthropicClient
-import uk.co.promptbuilt.notestodos.backup.BackupManager
+import uk.co.promptbuilt.notestodos.backup.SafBackup
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
 import uk.co.promptbuilt.notestodos.data.RecipesRepository
 import uk.co.promptbuilt.notestodos.data.SecureKeys
@@ -33,7 +33,7 @@ class RecipesViewModel(
     private val recipeFiles: RecipeFiles,
     private val secureKeys: SecureKeys,
     private val ingredientTodos: IngredientTodosUseCase,
-    private val backupManager: BackupManager,
+    private val backupManager: SafBackup,
     private val anthropicClient: AnthropicClient,
 ) : ViewModel() {
 
@@ -112,11 +112,11 @@ class RecipesViewModel(
                 repository.update(id, name.trim(), notes)
                 when {
                     newAttachment != null -> {
-                        recipeFiles.delete(existing?.pdfFileName)
+                        recipeFiles.deleteIfPresent(existing?.pdfFileName)
                         repository.setAttachment(id, newAttachment.fileName, newAttachment.originalName)
                     }
                     removeAttachment -> {
-                        recipeFiles.delete(existing?.pdfFileName)
+                        recipeFiles.deleteIfPresent(existing?.pdfFileName)
                         repository.setAttachment(id, null, null)
                     }
                 }
@@ -127,7 +127,7 @@ class RecipesViewModel(
 
     fun deleteRecipe(recipe: RecipeEntity) {
         viewModelScope.launch {
-            recipeFiles.delete(recipe.pdfFileName)
+            recipeFiles.deleteIfPresent(recipe.pdfFileName)
             repository.delete(recipe.id)
         }
     }

@@ -4,7 +4,6 @@ plugins {
     // AGP 9+ provides built-in Kotlin; no standalone org.jetbrains.kotlin.android.
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
 }
 
 android {
@@ -12,11 +11,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        // Deliberately unchanged after the HobPad rename: changing the id would
+        // orphan existing installs' data.
         applicationId = "uk.co.promptbuilt.notestodos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -42,11 +43,9 @@ kotlin {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 dependencies {
+    implementation(project(":core"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
 
@@ -61,15 +60,5 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
 
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
-
-    implementation(libs.datastore.preferences)
-    implementation(libs.security.crypto)
-    implementation(libs.okhttp)
-    implementation(libs.kotlinx.serialization.json)
-
     testImplementation(libs.junit)
-    testImplementation(libs.room.testing)
 }

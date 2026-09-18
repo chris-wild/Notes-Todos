@@ -1,19 +1,19 @@
 package uk.co.promptbuilt.notestodos.data
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class CategoryRulesTest {
 
     @Test
-    fun `defaults always present and first, even with no other categories`() {
+    fun defaultsAlwaysPresentAndFirst() {
         assertEquals(listOf("General", "Shopping List"), CategoryRules.union(emptyList(), emptyList()))
     }
 
     @Test
-    fun `union merges stored and in-use, others sorted alphabetically`() {
+    fun unionMergesStoredAndInUseOthersSorted() {
         val result = CategoryRules.union(
             stored = listOf("Work", "DIY"),
             inUse = listOf("Holiday", "Work"),
@@ -22,23 +22,22 @@ class CategoryRulesTest {
     }
 
     @Test
-    fun `dedupes case-insensitively with first-seen spelling winning`() {
+    fun dedupesCaseInsensitivelyFirstSeenSpellingWins() {
         val result = CategoryRules.union(
             stored = listOf("shopping list", "Work"),
             inUse = listOf("WORK"),
         )
-        // "shopping list" collapses into the default; "WORK" into stored "Work"
         assertEquals(listOf("General", "Shopping List", "Work"), result)
     }
 
     @Test
-    fun `blank names are ignored`() {
+    fun blankNamesAreIgnored() {
         val result = CategoryRules.union(stored = listOf("  ", ""), inUse = listOf("\t"))
         assertEquals(listOf("General", "Shopping List"), result)
     }
 
     @Test
-    fun `isDefault matches ignoring case and whitespace`() {
+    fun isDefaultMatchesIgnoringCaseAndWhitespace() {
         assertTrue(CategoryRules.isDefault("general"))
         assertTrue(CategoryRules.isDefault(" SHOPPING LIST "))
         assertFalse(CategoryRules.isDefault("Work"))

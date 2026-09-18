@@ -1,9 +1,9 @@
 package uk.co.promptbuilt.notestodos.data.db
 
-import android.content.Context
+import androidx.room.ConstructedBy
 import androidx.room.Database
-import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.RoomDatabaseConstructor
 
 @Database(
     entities = [
@@ -16,16 +16,17 @@ import androidx.room.RoomDatabase
     version = 1,
     exportSchema = true,
 )
+@ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun todoDao(): TodoDao
     abstract fun todoCategoryDao(): TodoCategoryDao
     abstract fun recipeDao(): RecipeDao
     abstract fun ingredientDao(): IngredientDao
+}
 
-    companion object {
-        fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "notes-todos.db")
-                .build()
-    }
+// The Room compiler generates the per-target actuals.
+@Suppress("KotlinNoActualForExpect", "EXPECT_ACTUAL_CLASSIFIERS_ARE_IN_BETA_WARNING")
+expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
+    override fun initialize(): AppDatabase
 }

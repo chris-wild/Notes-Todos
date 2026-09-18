@@ -63,7 +63,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             app.recipeFiles,
             app.secureKeys,
             app.ingredientTodosUseCase,
-            app.backupManager,
+            app.safBackup,
             app.anthropicClient,
         )
     }
@@ -457,9 +457,10 @@ private fun RecipeViewerDialog(
                             .heightIn(max = 160.dp),
                     )
                 }
-                if (recipe.pdfFileName != null) {
+                val pdfFileName = recipe.pdfFileName
+                if (pdfFileName != null) {
                     PdfViewer(
-                        file = recipeFiles.fileFor(recipe.pdfFileName),
+                        file = recipeFiles.fileFor(pdfFileName),
                         modifier = Modifier.weight(1f),
                     )
                 } else {

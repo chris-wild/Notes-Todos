@@ -9,7 +9,7 @@ class NotesRepository(private val noteDao: NoteDao) {
     fun observeNotes(): Flow<List<NoteEntity>> = noteDao.observeAll()
 
     suspend fun create(title: String, content: String): Long {
-        val now = System.currentTimeMillis()
+        val now = nowMillis()
         return noteDao.insert(
             NoteEntity(
                 title = title,
@@ -23,7 +23,7 @@ class NotesRepository(private val noteDao: NoteDao) {
 
     suspend fun update(id: Long, title: String, content: String) {
         val note = noteDao.getById(id) ?: return
-        noteDao.update(note.copy(title = title, content = content, updatedAt = System.currentTimeMillis()))
+        noteDao.update(note.copy(title = title, content = content, updatedAt = nowMillis()))
     }
 
     // Matches web togglePin (App.js:279): flips pinned and stamps sortOrder with "now"
@@ -31,7 +31,7 @@ class NotesRepository(private val noteDao: NoteDao) {
     // updatedAt, so pinning doesn't reshuffle date-sorted lists.
     suspend fun setPinned(id: Long, pinned: Boolean) {
         val note = noteDao.getById(id) ?: return
-        noteDao.update(note.copy(pinned = pinned, sortOrder = System.currentTimeMillis()))
+        noteDao.update(note.copy(pinned = pinned, sortOrder = nowMillis()))
     }
 
     suspend fun delete(id: Long) = noteDao.delete(id)

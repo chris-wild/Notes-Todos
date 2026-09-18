@@ -18,18 +18,29 @@ import kotlinx.coroutines.withContext
  * are normalised on-device into a single-page PDF so the viewer only ever deals
  * with PDFs, matching the server behavior.
  */
-class RecipeFiles(private val context: Context) {
+class RecipeFiles(private val context: Context) : RecipeStore {
 
     private val dir: File
         get() = File(context.filesDir, "recipes").apply { mkdirs() }
 
     fun fileFor(fileName: String): File = File(dir, fileName)
 
-    fun delete(fileName: String?) {
+    fun deleteIfPresent(fileName: String?) {
         if (!fileName.isNullOrBlank()) fileFor(fileName).delete()
     }
 
-    fun clearAll() {
+    override fun read(fileName: String): ByteArray? =
+        fileFor(fileName).takeIf { it.exists() }?.readBytes()
+
+    override fun write(fileName: String, bytes: ByteArray) {
+        fileFor(fileName).writeBytes(bytes)
+    }
+
+    override fun delete(fileName: String) {
+        fileFor(fileName).delete()
+    }
+
+    override fun clearAll() {
         dir.listFiles()?.forEach { it.delete() }
     }
 

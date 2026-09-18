@@ -1,7 +1,7 @@
 package uk.co.promptbuilt.notestodos.data
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
 import uk.co.promptbuilt.notestodos.data.db.NoteEntity
 
 class NoteSortingTest {
@@ -14,32 +14,32 @@ class NoteSortingTest {
     private val zebra = note(3, "Zebra", updatedAt = 2000)
 
     @Test
-    fun `dateDesc puts most recently updated first`() {
+    fun dateDescPutsMostRecentlyUpdatedFirst() {
         val sorted = NoteSorting.sort(listOf(alpha, zebra, shopping), NoteSort.DateDesc)
         assertEquals(listOf(1L, 3L, 2L), sorted.map { it.id })
     }
 
     @Test
-    fun `dateAsc puts oldest first`() {
+    fun dateAscPutsOldestFirst() {
         val sorted = NoteSorting.sort(listOf(shopping, alpha, zebra), NoteSort.DateAsc)
         assertEquals(listOf(2L, 3L, 1L), sorted.map { it.id })
     }
 
     @Test
-    fun `alpha sorting is case-insensitive and trims`() {
+    fun alphaSortingIsCaseInsensitiveAndTrims() {
         val padded = note(4, "  beta  ", updatedAt = 500)
         val sorted = NoteSorting.sort(listOf(zebra, padded, shopping, alpha), NoteSort.AlphaAsc)
         assertEquals(listOf("alpha note", "  beta  ", "Shopping", "Zebra"), sorted.map { it.title })
     }
 
     @Test
-    fun `alphaDesc reverses title order`() {
+    fun alphaDescReversesTitleOrder() {
         val sorted = NoteSorting.sort(listOf(alpha, zebra, shopping), NoteSort.AlphaDesc)
         assertEquals(listOf("Zebra", "Shopping", "alpha note"), sorted.map { it.title })
     }
 
     @Test
-    fun `alpha tiebreaker is most recently updated first`() {
+    fun alphaTiebreakerIsMostRecentlyUpdatedFirst() {
         val older = note(5, "Same", updatedAt = 100)
         val newer = note(6, "same", updatedAt = 200)
         val sorted = NoteSorting.sort(listOf(older, newer), NoteSort.AlphaAsc)
@@ -47,7 +47,7 @@ class NoteSortingTest {
     }
 
     @Test
-    fun `date tiebreaker is title ascending`() {
+    fun dateTiebreakerIsTitleAscending() {
         val b = note(7, "Bravo", updatedAt = 100)
         val a = note(8, "Alpha", updatedAt = 100)
         val sorted = NoteSorting.sort(listOf(b, a), NoteSort.DateDesc)
@@ -55,7 +55,7 @@ class NoteSortingTest {
     }
 
     @Test
-    fun `falls back to createdAt when updatedAt is unset`() {
+    fun fallsBackToCreatedAtWhenUpdatedAtIsUnset() {
         val legacy = note(9, "Legacy", updatedAt = 0, createdAt = 5000)
         val sorted = NoteSorting.sort(listOf(shopping, legacy), NoteSort.DateDesc)
         assertEquals(listOf(9L, 1L), sorted.map { it.id })
