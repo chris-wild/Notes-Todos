@@ -1,8 +1,11 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.kmp.library)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
+    alias(libs.plugins.skie)
 }
 
 kotlin {
@@ -16,7 +19,14 @@ kotlin {
         withHostTest {}
     }
 
-    // iOS targets + XCFramework arrive in the next step.
+    val xcf = XCFramework("HobPadCore")
+    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
+        target.binaries.framework {
+            baseName = "HobPadCore"
+            isStatic = true
+            xcf.add(this)
+        }
+    }
 
     sourceSets {
         commonMain.dependencies {
@@ -43,4 +53,6 @@ room {
 
 dependencies {
     add("kspAndroid", libs.room.compiler)
+    add("kspIosArm64", libs.room.compiler)
+    add("kspIosSimulatorArm64", libs.room.compiler)
 }

@@ -23,7 +23,9 @@ object CategoryRules {
         val seen = LinkedHashMap<String, String>()
         for (name in DEFAULTS + stored + inUse) {
             val trimmed = name.trim()
-            if (trimmed.isNotEmpty()) seen.putIfAbsent(normalize(trimmed), trimmed)
+            if (trimmed.isEmpty()) continue
+            val normalized = normalize(trimmed)
+            if (normalized !in seen) seen[normalized] = trimmed
         }
         val defaults = DEFAULTS.map { seen.remove(normalize(it))!! }
         return defaults + seen.values.sortedBy { normalize(it) }

@@ -1,0 +1,98 @@
+name: HobPad
+options:
+  bundleIdPrefix: uk.co.promptbuilt
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  # Swift 6 language mode, strict concurrency ON (RiderNav convention). Bridged-Kotlin
+  # immutable types carry @unchecked @retroactive Sendable conformances in
+  # Support/KotlinBridging.swift — add new ones ONLY for genuinely immutable core types.
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: U9RDY3V58L
+  configs:
+    # Simulator development needs no signing identity; ad-hoc sign so local runs work
+    # without a cert. Device/archive uses automatic signing with the team above.
+    Debug:
+      CODE_SIGNING_REQUIRED: "NO"
+      CODE_SIGNING_ALLOWED: "YES"
+      CODE_SIGN_IDENTITY: "-"
+    Release:
+      CODE_SIGNING_REQUIRED: "YES"
+      CODE_SIGNING_ALLOWED: "YES"
+
+configs:
+  Debug: debug
+  Release: release
+
+schemes:
+  HobPad:
+    build:
+      targets:
+        HobPad: all
+    run:
+      config: Debug
+    archive:
+      config: Release
+
+targets:
+  HobPad:
+    type: application
+    platform: iOS
+    sources:
+      - path: HobPad
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: uk.co.promptbuilt.hobpad
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: HobPad
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        # Expose the app's Documents folder in the Files app: lets users (and the
+        # simulator import test) see and pick backup zips placed there.
+        INFOPLIST_KEY_UIFileSharingEnabled: "YES"
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # The pre-build script shells out to Gradle to rebuild the :core XCFramework,
+        # which writes outside DerivedData, so the user-script sandbox must be off.
+        ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        # The shared :core framework ships an arm64 simulator slice only.
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+    dependencies:
+      # The shared Kotlin logic. The pre-build script stages the variant matching the
+      # Xcode configuration at this stable path.
+      - framework: ../core/build/XCFrameworks/current/HobPadCore.xcframework
+        embed: true
+    preBuildScripts:
+      - name: Build HobPadCore XCFramework (Gradle)
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          # Locate a JDK for Gradle: honour an existing JAVA_HOME, else fall back to
+          # Android Studio's bundled JBR, else the system java_home.
+          if [ -z "${JAVA_HOME:-}" ] || [ ! -x "${JAVA_HOME:-}/bin/java" ]; then
+            if [ -x "/Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java" ]; then
+              export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+            elif /usr/libexec/java_home >/dev/null 2>&1; then
+              export JAVA_HOME="$(/usr/libexec/java_home)"
+            fi
+          fi
+          cd "$SRCROOT/.."
+          if [ "${CONFIGURATION:-Debug}" = "Release" ]; then
+            ./gradlew :core:assembleHobPadCoreReleaseXCFramework
+            VARIANT=release
+          else
+            ./gradlew :core:assembleHobPadCoreDebugXCFramework
+            VARIANT=debug
+          fi
+          STAGE="core/build/XCFrameworks/current/HobPadCore.xcframework"
+          rm -rf "$STAGE"
+          mkdir -p "core/build/XCFrameworks/current"
+          cp -R "core/build/XCFrameworks/$VARIANT/HobPadCore.xcframework" "$STAGE"
