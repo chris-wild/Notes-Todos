@@ -46,18 +46,28 @@ targets:
     platform: iOS
     sources:
       - path: HobPad
+    # Explicit Info.plist (XcodeGen-generated from these properties): the
+    # INFOPLIST_KEY_ build-setting route silently dropped UIFileSharingEnabled,
+    # which hides the app's Documents from the Files app and the import picker.
+    info:
+      path: HobPad/Info.plist
+      properties:
+        CFBundleDisplayName: HobPad
+        UILaunchScreen: {}
+        # Expose the app's Documents folder in the Files app: users can see
+        # exported backups and drop zips there to import.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: uk.co.promptbuilt.hobpad
-        GENERATE_INFOPLIST_FILE: "YES"
-        INFOPLIST_KEY_CFBundleDisplayName: HobPad
-        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
-        # Expose the app's Documents folder in the Files app: lets users (and the
-        # simulator import test) see and pick backup zips placed there.
-        INFOPLIST_KEY_UIFileSharingEnabled: "YES"
-        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # The pre-build script shells out to Gradle to rebuild the :core XCFramework,
         # which writes outside DerivedData, so the user-script sandbox must be off.
