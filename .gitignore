@@ -1,5 +1,13 @@
 .DS_Store
 
+# Gradle / Android
+.gradle/
+build/
+local.properties
+.kotlin/
+captures/
+*.iml
+
 # IDE and local tool config
 .vscode/
 .idea/

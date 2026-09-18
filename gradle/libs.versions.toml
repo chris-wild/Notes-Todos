@@ -1,17 +1,25 @@
 [versions]
-agp = "8.13.0"
-kotlin = "2.2.10"
-ksp = "2.2.10-2.0.2"
+# Toolchain matches RiderNav's proven KMP stack (see /Volumes/DATA/Projects/RiderNav/ridernav).
+agp = "9.2.0"
+kotlin = "2.3.21"
+# KSP versioning decoupled from Kotlin after 2.2.x; the 2.3.x series covers Kotlin 2.3.
+ksp = "2.3.12"
+# SKIE: Swift-friendly bridging for :core (sealed classes/enums -> exhaustive Swift switches).
+# Supports Kotlin 2.0.0-2.4.10.
+skie = "0.10.14"
+
 coreKtx = "1.17.0"
-composeBom = "2025.09.00"
+composeBom = "2026.04.01"
 activityCompose = "1.11.0"
 navigationCompose = "2.9.4"
 lifecycle = "2.9.3"
-room = "2.8.1"
-datastore = "1.1.7"
+room = "2.8.5"
+sqlite = "2.7.1"
+datastore = "1.2.1"
 securityCrypto = "1.1.0"
 okhttp = "4.12.0"
 kotlinxSerialization = "1.9.0"
+kotlinxCoroutines = "1.10.2"
 junit = "4.13.2"
 
 [libraries]
@@ -29,16 +37,23 @@ lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-ru
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
+sqlite-bundled = { group = "androidx.sqlite", name = "sqlite-bundled", version.ref = "sqlite" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+datastore-preferences-core = { group = "androidx.datastore", name = "datastore-preferences-core", version.ref = "datastore" }
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 
 [plugins]
+# AGP 9+ has built-in Kotlin, so there is no standalone kotlin-android plugin.
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+android-kmp-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+room = { id = "androidx.room", version.ref = "room" }
+skie = { id = "co.touchlab.skie", version.ref = "skie" }
