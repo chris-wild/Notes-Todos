@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 26-30 Auto Backup rules; mirrors data_extraction_rules.xml -->
+<full-backup-content>
+    <exclude domain="file" path="recipes/" />
+    <exclude domain="sharedpref" path="secure_prefs.xml" />
+</full-backup-content>

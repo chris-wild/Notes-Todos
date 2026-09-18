@@ -42,3 +42,4 @@ reports/
 
 # Stale backup files
 *.JavaBoy
+export/
