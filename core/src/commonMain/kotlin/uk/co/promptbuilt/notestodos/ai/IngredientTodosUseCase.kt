@@ -36,10 +36,15 @@ class IngredientTodosUseCase(
                 if (!row.quantity.isNullOrBlank()) "${row.quantity} ${row.name}".trim() else row.name
             }
         } else {
-            val extracted = if (recipe.pdfFileName != null) {
-                val bytes = recipeStore.read(recipe.pdfFileName)
-                    ?: throw IllegalStateException("PDF not found")
-                client.extractIngredientsFromPdf(bytes, recipe.name, apiKey)
+            val attachments = recipes.getAttachments(recipeId)
+            val extracted = if (attachments.isNotEmpty()) {
+                // Merge every attached PDF's list, in attachment order — a recipe
+                // photographed across several pages yields one combined list.
+                attachments.flatMap { attachment ->
+                    val bytes = recipeStore.read(attachment.fileName)
+                        ?: throw IllegalStateException("PDF not found: ${attachment.originalName ?: attachment.fileName}")
+                    client.extractIngredientsFromPdf(bytes, recipe.name, apiKey)
+                }
             } else {
                 val text = recipe.notes.trim()
                 if (text.isEmpty()) {

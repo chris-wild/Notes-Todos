@@ -15,8 +15,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -41,22 +41,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import java.io.File
 import java.text.DateFormat
 import java.util.Date
 import uk.co.promptbuilt.notestodos.NotesTodosApp
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
+import uk.co.promptbuilt.notestodos.data.db.RecipeAttachmentEntity
 import uk.co.promptbuilt.notestodos.data.db.RecipeEntity
 
 @Composable
 fun RecipesScreen(onOpenTodos: () -> Unit) {
-    val app = LocalContext.current.applicationContext as NotesTodosApp
+    val context = LocalContext.current
+    val app = context.applicationContext as NotesTodosApp
     val viewModel: RecipesViewModel = viewModel {
         RecipesViewModel(
             app.recipesRepository,
@@ -75,6 +78,29 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
     var deleteTarget by remember { mutableStateOf<RecipeEntity?>(null) }
     var settingsOpen by remember { mutableStateOf(false) }
 
+    // "Take photo of recipe": camera writes to a FileProvider Uri in cache/captures/.
+    var captureUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { taken ->
+        val uri = captureUri
+        if (taken && uri != null) {
+            viewModel.importAttachment(uri) { imported ->
+                viewModel.createFromCapture(imported)
+            }
+        }
+        captureUri = null
+    }
+
+    fun launchCamera() {
+        val dir = File(context.cacheDir, "captures").apply { mkdirs() }
+        val uri = FileProvider.getUriForFile(
+            context,
+            "uk.co.promptbuilt.notestodos.fileprovider",
+            File(dir, "recipe-capture.jpg"),
+        )
+        captureUri = uri
+        cameraLauncher.launch(uri)
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
@@ -89,6 +115,9 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
                 placeholder = { Text("Search recipes") },
                 singleLine = true,
             )
+            IconButton(onClick = ::launchCamera) {
+                Icon(Icons.Filled.PhotoCamera, contentDescription = "Take photo of recipe")
+            }
             IconButton(onClick = { settingsOpen = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
             }
@@ -135,9 +164,10 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
                     RecipeForm(
                         title = "Add Recipe",
                         initial = null,
+                        existingAttachments = emptyList(),
                         viewModel = viewModel,
-                        onSave = { name, notes, attachment, _ ->
-                            viewModel.saveRecipe(null, name, notes, attachment, false) {
+                        onSave = { name, notes, newAttachments, removals ->
+                            viewModel.saveRecipe(null, name, notes, newAttachments, removals) {
                                 composerOpen = false
                             }
                         },
@@ -164,6 +194,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             items(state.recipes, key = { it.id }) { recipe ->
                 RecipeListItem(
                     recipe = recipe,
+                    attachmentCount = state.attachmentsByRecipe[recipe.id]?.size ?: 0,
                     onOpen = { viewingRecipe = recipe },
                     onEdit = { editingRecipe = recipe },
                     onDelete = { deleteTarget = recipe },
@@ -186,9 +217,10 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
                 RecipeForm(
                     title = "Edit Recipe",
                     initial = recipe,
+                    existingAttachments = state.attachmentsByRecipe[recipe.id].orEmpty(),
                     viewModel = viewModel,
-                    onSave = { name, notes, attachment, removeExisting ->
-                        viewModel.saveRecipe(recipe.id, name, notes, attachment, removeExisting) {
+                    onSave = { name, notes, newAttachments, removals ->
+                        viewModel.saveRecipe(recipe.id, name, notes, newAttachments, removals) {
                             editingRecipe = null
                         }
                     },
@@ -201,6 +233,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
     viewingRecipe?.let { recipe ->
         RecipeViewerDialog(
             recipe = recipe,
+            attachments = state.attachmentsByRecipe[recipe.id].orEmpty(),
             recipeFiles = app.recipeFiles,
             ingredientAutomation = state.ingredientAutomation,
             working = state.working != null,
@@ -218,7 +251,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("Delete recipe?") },
-            text = { Text("\"${recipe.name}\" and its attachment will be permanently deleted.") },
+            text = { Text("\"${recipe.name}\" and its attachments will be permanently deleted.") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.deleteRecipe(recipe)
@@ -260,31 +293,29 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
 private fun RecipeForm(
     title: String,
     initial: RecipeEntity?,
+    existingAttachments: List<RecipeAttachmentEntity>,
     viewModel: RecipesViewModel,
-    onSave: (name: String, notes: String, attachment: RecipeFiles.Imported?, removeExisting: Boolean) -> Unit,
+    onSave: (
+        name: String,
+        notes: String,
+        newAttachments: List<RecipeFiles.Imported>,
+        removals: List<RecipeAttachmentEntity>,
+    ) -> Unit,
     onCancel: () -> Unit,
 ) {
     var name by rememberSaveable(initial?.id) { mutableStateOf(initial?.name ?: "") }
     var notes by rememberSaveable(initial?.id) { mutableStateOf(initial?.notes ?: "") }
-    var pending by remember(initial?.id) { mutableStateOf<RecipeFiles.Imported?>(null) }
-    var removeExisting by rememberSaveable(initial?.id) { mutableStateOf(false) }
+    var pending by remember(initial?.id) { mutableStateOf<List<RecipeFiles.Imported>>(emptyList()) }
+    var removals by remember(initial?.id) { mutableStateOf<List<RecipeAttachmentEntity>>(emptyList()) }
 
     val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri != null) {
-            viewModel.importAttachment(uri) { imported ->
-                pending?.let(viewModel::discardImported)
-                pending = imported
-                removeExisting = false
-            }
+            viewModel.importAttachment(uri) { imported -> pending = pending + imported }
         }
     }
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri: Uri? ->
         if (uri != null) {
-            viewModel.importAttachment(uri) { imported ->
-                pending?.let(viewModel::discardImported)
-                pending = imported
-                removeExisting = false
-            }
+            viewModel.importAttachment(uri) { imported -> pending = pending + imported }
         }
     }
 
@@ -316,28 +347,39 @@ private fun RecipeForm(
             }) { Text("Attach image") }
         }
 
-        val attachmentLabel = when {
-            pending != null -> "Will attach: ${pending!!.originalName}"
-            removeExisting -> "Attachment will be removed on save."
-            initial?.pdfFileName != null -> "File attached: ${initial.pdfOriginalName ?: "PDF"}"
-            else -> null
-        }
-        if (attachmentLabel != null) {
+        for (attachment in existingAttachments) {
+            val removed = attachment in removals
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = attachmentLabel,
+                    text = (attachment.originalName ?: attachment.fileName) +
+                        if (removed) "  (will be removed)" else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                when {
-                    pending != null -> TextButton(onClick = {
-                        pending?.let(viewModel::discardImported)
-                        pending = null
-                    }) { Text("Discard") }
-                    removeExisting -> TextButton(onClick = { removeExisting = false }) { Text("Undo") }
-                    initial?.pdfFileName != null -> TextButton(onClick = { removeExisting = true }) { Text("Remove") }
+                if (removed) {
+                    TextButton(onClick = { removals = removals - attachment }) { Text("Undo") }
+                } else {
+                    TextButton(onClick = { removals = removals + attachment }) { Text("Remove") }
                 }
+            }
+        }
+        for (imported in pending) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Will attach: ${imported.originalName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                TextButton(onClick = {
+                    viewModel.discardImported(imported)
+                    pending = pending - imported
+                }) { Text("Discard") }
             }
         }
 
@@ -348,10 +390,10 @@ private fun RecipeForm(
             horizontalArrangement = Arrangement.End,
         ) {
             TextButton(onClick = {
-                pending?.let(viewModel::discardImported)
+                pending.forEach(viewModel::discardImported)
                 onCancel()
             }) { Text("Cancel") }
-            TextButton(onClick = { onSave(name, notes, pending, removeExisting) }) {
+            TextButton(onClick = { onSave(name, notes, pending, removals) }) {
                 Text(if (initial == null) "Save Recipe" else "Update Recipe")
             }
         }
@@ -361,6 +403,7 @@ private fun RecipeForm(
 @Composable
 private fun RecipeListItem(
     recipe: RecipeEntity,
+    attachmentCount: Int,
     onOpen: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -384,9 +427,9 @@ private fun RecipeListItem(
                     )
                 }
                 Row {
-                    if (recipe.pdfFileName != null) {
+                    if (attachmentCount > 0) {
                         Text(
-                            text = "PDF",
+                            text = if (attachmentCount == 1) "PDF" else "$attachmentCount PDFs",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(end = 8.dp),
@@ -418,6 +461,7 @@ private fun RecipeListItem(
 @Composable
 private fun RecipeViewerDialog(
     recipe: RecipeEntity,
+    attachments: List<RecipeAttachmentEntity>,
     recipeFiles: RecipeFiles,
     ingredientAutomation: Boolean,
     working: Boolean,
@@ -457,10 +501,9 @@ private fun RecipeViewerDialog(
                             .heightIn(max = 160.dp),
                     )
                 }
-                val pdfFileName = recipe.pdfFileName
-                if (pdfFileName != null) {
+                if (attachments.isNotEmpty()) {
                     PdfViewer(
-                        file = recipeFiles.fileFor(pdfFileName),
+                        files = attachments.map { recipeFiles.fileFor(it.fileName) },
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -503,9 +546,9 @@ private fun SettingsDialog(
                 Text("Anthropic API key", style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = if (hasKey) {
-                        "A key is stored securely on this device. It unlocks \"Create ingredient list\"."
+                        "A key is stored securely on this device. It unlocks \"Create ingredient list\" and photo naming."
                     } else {
-                        "Add a key to unlock \"Create ingredient list\". It is stored in the Android Keystore and never backed up."
+                        "Add a key to unlock \"Create ingredient list\" and automatic naming of photographed recipes."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -518,9 +561,9 @@ private fun SettingsDialog(
                         .padding(top = 8.dp),
                     placeholder = { Text(if (hasKey) "Replace key (sk-ant-…)" else "sk-ant-…") },
                     singleLine = true,
-                    // Password keyboard: stops autocorrect/auto-capitalize mangling the key.
-                    // Text stays visible (no VisualTransformation) so typos can be spotted.
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Password,
+                    ),
                 )
                 Row {
                     TextButton(onClick = {
@@ -542,7 +585,7 @@ private fun SettingsDialog(
                 )
                 Row {
                     TextButton(onClick = {
-                        exportLauncher.launch("notes-todos-backup.zip")
+                        exportLauncher.launch("hobpad-backup.zip")
                     }) { Text("Export backup") }
                     TextButton(onClick = {
                         importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))

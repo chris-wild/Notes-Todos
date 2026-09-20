@@ -50,14 +50,34 @@ data class RecipeEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val notes: String = "",
-    // File name inside filesDir/recipes/ (not a full path), null when no attachment.
-    val pdfFileName: String? = null,
-    val pdfOriginalName: String? = null,
     val ingredientTodoCategory: String? = null,
     val ingredientTodosCount: Int? = null,
     val ingredientTodosCreatedAt: Long? = null,
     val createdAt: Long,
     val updatedAt: Long,
+)
+
+/** A PDF attached to a recipe (schema v2: recipes can hold several). */
+@Entity(
+    tableName = "recipe_attachments",
+    indices = [Index("recipeId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = RecipeEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["recipeId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+)
+data class RecipeAttachmentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val recipeId: Long,
+    /** File name inside the platform recipe store (not a full path). */
+    val fileName: String,
+    val originalName: String? = null,
+    val position: Int = 0,
+    val createdAt: Long,
 )
 
 @Entity(

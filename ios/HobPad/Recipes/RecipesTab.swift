@@ -27,6 +27,8 @@ private struct RecipesContent: View {
     @State private var viewingRecipe: RecipeEntity?
     @State private var deleteTarget: RecipeEntity?
     @State private var settingsOpen = false
+    @State private var cameraOpen = false
+    @State private var cameraFallbackItem: PhotosPickerItem?
 
     var body: some View {
         NavigationStack {
@@ -51,28 +53,7 @@ private struct RecipesContent: View {
                     Button {
                         viewingRecipe = recipe
                     } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(recipe.name)
-                                .font(.headline)
-                                .foregroundStyle(.primary)
-                            if !recipe.notes.isEmpty {
-                                Text(recipe.notes)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                            }
-                            HStack(spacing: 8) {
-                                if recipe.pdfFileName != nil {
-                                    Text("PDF")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(Color.accentColor)
-                                }
-                                Text(Date(timeIntervalSince1970: Double(recipe.updatedAt != 0 ? recipe.updatedAt : recipe.createdAt) / 1000),
-                                     style: .date)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        recipeRow(recipe)
                     }
                     .swipeActions {
                         Button("Delete", role: .destructive) { deleteTarget = recipe }
@@ -85,6 +66,14 @@ private struct RecipesContent: View {
             .searchable(text: $model.query, prompt: "Search recipes")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    if CameraCapture.isAvailable {
+                        Button { cameraOpen = true } label: { Image(systemName: "camera") }
+                    } else {
+                        // No camera (simulator / some iPads): photo library stands in.
+                        PhotosPicker(selection: $cameraFallbackItem, matching: .images) {
+                            Image(systemName: "camera")
+                        }
+                    }
                     Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
                     Button { composing = true } label: { Image(systemName: "plus") }
                 }
@@ -101,6 +90,21 @@ private struct RecipesContent: View {
             .sheet(isPresented: $settingsOpen) {
                 SettingsSheet(model: model)
             }
+            .fullScreenCover(isPresented: $cameraOpen) {
+                CameraCapture { imageData in
+                    model.createFromCapture(imageData: imageData)
+                }
+                .ignoresSafeArea()
+            }
+            .onChange(of: cameraFallbackItem) {
+                guard let item = cameraFallbackItem else { return }
+                Task {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        model.createFromCapture(imageData: data)
+                    }
+                    cameraFallbackItem = nil
+                }
+            }
             .confirmationDialog(
                 "Delete recipe?",
                 isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
@@ -111,7 +115,7 @@ private struct RecipesContent: View {
                     deleteTarget = nil
                 }
             } message: {
-                Text("\"\(deleteTarget?.name ?? "")\" and its attachment will be permanently deleted.")
+                Text("\"\(deleteTarget?.name ?? "")\" and its attachments will be permanently deleted.")
             }
             .overlay {
                 if let working = model.working {
@@ -124,7 +128,34 @@ private struct RecipesContent: View {
                 }
             }
             .task { await model.observeRecipes() }
+            .task { await model.observeAttachments() }
             .task { await model.observeKey() }
+        }
+    }
+
+    private func recipeRow(_ recipe: RecipeEntity) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(recipe.name)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            if !recipe.notes.isEmpty {
+                Text(recipe.notes)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 8) {
+                let count = model.attachments(for: recipe).count
+                if count > 0 {
+                    Text(count == 1 ? "PDF" : "\(count) PDFs")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                Text(Date(timeIntervalSince1970: Double(recipe.updatedAt != 0 ? recipe.updatedAt : recipe.createdAt) / 1000),
+                     style: .date)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -133,8 +164,15 @@ private struct RecipeViewerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: RecipesModel
     let recipe: RecipeEntity
+    @State private var fullScreenPath: FullScreenPdf?
+
+    private struct FullScreenPdf: Identifiable {
+        let id: String
+        var path: String { id }
+    }
 
     var body: some View {
+        let attachments = model.attachments(for: recipe)
         NavigationStack {
             VStack(alignment: .leading, spacing: 8) {
                 if !recipe.notes.isEmpty {
@@ -145,14 +183,22 @@ private struct RecipeViewerSheet: View {
                     .frame(maxHeight: 160)
                     .padding(.horizontal)
                 }
-                if let path = model.pdfPath(recipe) {
-                    RecipePDFView(path: path)
-                } else {
+                if attachments.isEmpty {
                     Spacer()
                     Text("No PDF attached to this recipe.")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                     Spacer()
+                } else if attachments.count == 1 {
+                    pdfPage(attachments[0])
+                } else {
+                    TabView {
+                        ForEach(attachments, id: \.id) { attachment in
+                            pdfPage(attachment)
+                        }
+                    }
+                    .tabViewStyle(.page)
+                    .indexViewStyle(.page(backgroundDisplayMode: .always))
                 }
             }
             .navigationTitle(recipe.name)
@@ -170,7 +216,33 @@ private struct RecipeViewerSheet: View {
                     }
                 }
             }
+            .fullScreenCover(item: $fullScreenPath) { item in
+                NavigationStack {
+                    RecipePDFView(path: item.path)
+                        .ignoresSafeArea(edges: .bottom)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { fullScreenPath = nil }
+                            }
+                        }
+                }
+            }
         }
+    }
+
+    private func pdfPage(_ attachment: RecipeAttachmentEntity) -> some View {
+        RecipePDFView(path: model.pdfPath(attachment))
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    fullScreenPath = FullScreenPdf(id: model.pdfPath(attachment))
+                } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .padding(10)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .padding(12)
+            }
     }
 }
 
@@ -181,45 +253,47 @@ private struct RecipeEditorSheet: View {
 
     @State private var name = ""
     @State private var notes = ""
-    @State private var pendingAttachment: (data: Data, originalName: String)?
-    @State private var removeExisting = false
+    @State private var pending: [(data: Data, originalName: String)] = []
+    @State private var removals: [RecipeAttachmentEntity] = []
     @State private var pdfPickerOpen = false
     @State private var photoItem: PhotosPickerItem?
 
     var body: some View {
+        let existing = recipe.map { model.attachments(for: $0) } ?? []
         NavigationStack {
             Form {
                 TextField("Recipe name", text: $name)
                 TextField("Recipe notes (optional)…", text: $notes, axis: .vertical)
                     .lineLimit(4...12)
 
-                Section("Attachment") {
+                Section("Attachments") {
                     Button("Attach PDF") { pdfPickerOpen = true }
                     PhotosPicker("Attach image", selection: $photoItem, matching: .images)
 
-                    if let pending = pendingAttachment {
+                    ForEach(existing, id: \.id) { attachment in
+                        let removed = removals.contains { $0.id == attachment.id }
                         HStack {
-                            Text("Will attach: \(pending.originalName)")
+                            Text((attachment.originalName ?? attachment.fileName) +
+                                 (removed ? "  (will be removed)" : ""))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                             Spacer()
-                            Button("Discard") { pendingAttachment = nil }
+                            if removed {
+                                Button("Undo") { removals.removeAll { $0.id == attachment.id } }
+                            } else {
+                                Button("Remove") { removals.append(attachment) }
+                            }
                         }
-                    } else if removeExisting {
+                    }
+                    ForEach(Array(pending.enumerated()), id: \.offset) { index, item in
                         HStack {
-                            Text("Attachment will be removed on save.")
+                            Text("Will attach: \(item.originalName)")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(1)
                             Spacer()
-                            Button("Undo") { removeExisting = false }
-                        }
-                    } else if let existingName = recipe?.pdfOriginalName ?? recipe?.pdfFileName {
-                        HStack {
-                            Text("File attached: \(existingName)")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Remove") { removeExisting = true }
+                            Button("Discard") { pending.remove(at: index) }
                         }
                     }
                 }
@@ -236,21 +310,25 @@ private struct RecipeEditorSheet: View {
                             id: recipe?.id,
                             name: name,
                             notes: notes,
-                            newAttachment: pendingAttachment,
-                            removeAttachment: removeExisting,
+                            newAttachments: pending,
+                            removals: removals,
                         )
                         dismiss()
                     }
                 }
             }
             .fileImporter(isPresented: $pdfPickerOpen, allowedContentTypes: [.pdf]) { result in
-                if case .success(let url) = result {
+                switch result {
+                case .success(let url):
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    if let data = try? Data(contentsOf: url) {
-                        pendingAttachment = (data, url.lastPathComponent)
-                        removeExisting = false
+                    do {
+                        pending.append((try Data(contentsOf: url), url.lastPathComponent))
+                    } catch {
+                        model.message = "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
                     }
+                case .failure(let error):
+                    model.message = "Picker failed: \(error.localizedDescription)"
                 }
             }
             .onChange(of: photoItem) {
@@ -258,8 +336,7 @@ private struct RecipeEditorSheet: View {
                 Task {
                     if let data = try? await item.loadTransferable(type: Data.self),
                        let pdf = ImageToPDF.convert(data) {
-                        pendingAttachment = (pdf, "photo.jpg")
-                        removeExisting = false
+                        pending.append((pdf, "photo.jpg"))
                     }
                     photoItem = nil
                 }

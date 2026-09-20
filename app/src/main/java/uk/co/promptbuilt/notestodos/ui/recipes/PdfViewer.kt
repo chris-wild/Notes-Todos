@@ -25,40 +25,47 @@ import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Native inline PDF viewing via PdfRenderer (replaces the web iframe). */
+/**
+ * Native inline PDF viewing via PdfRenderer (replaces the web iframe).
+ * Renders every file's pages sequentially — a recipe with several attached
+ * PDFs reads as one continuous document.
+ */
 @Composable
-fun PdfViewer(file: File, modifier: Modifier = Modifier) {
-    var pages by remember(file) { mutableStateOf<List<Bitmap>>(emptyList()) }
-    var error by remember(file) { mutableStateOf<String?>(null) }
+fun PdfViewer(files: List<File>, modifier: Modifier = Modifier) {
+    var pages by remember(files) { mutableStateOf<List<Bitmap>>(emptyList()) }
+    var error by remember(files) { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(file) {
+    LaunchedEffect(files) {
         withContext(Dispatchers.IO) {
             try {
-                ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
-                    PdfRenderer(pfd).use { renderer ->
-                        val rendered = mutableListOf<Bitmap>()
-                        val pageCount = minOf(renderer.pageCount, MAX_PAGES)
-                        for (i in 0 until pageCount) {
-                            val page = renderer.openPage(i)
-                            try {
-                                val bitmap = Bitmap.createBitmap(
-                                    page.width * RENDER_SCALE,
-                                    page.height * RENDER_SCALE,
-                                    Bitmap.Config.ARGB_8888,
-                                )
-                                bitmap.eraseColor(android.graphics.Color.WHITE)
-                                val matrix = Matrix().apply {
-                                    setScale(RENDER_SCALE.toFloat(), RENDER_SCALE.toFloat())
+                val rendered = mutableListOf<Bitmap>()
+                for (file in files) {
+                    if (rendered.size >= MAX_PAGES) break
+                    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+                        PdfRenderer(pfd).use { renderer ->
+                            val pageCount = minOf(renderer.pageCount, MAX_PAGES - rendered.size)
+                            for (i in 0 until pageCount) {
+                                val page = renderer.openPage(i)
+                                try {
+                                    val bitmap = Bitmap.createBitmap(
+                                        page.width * RENDER_SCALE,
+                                        page.height * RENDER_SCALE,
+                                        Bitmap.Config.ARGB_8888,
+                                    )
+                                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                                    val matrix = Matrix().apply {
+                                        setScale(RENDER_SCALE.toFloat(), RENDER_SCALE.toFloat())
+                                    }
+                                    page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                    rendered.add(bitmap)
+                                } finally {
+                                    page.close()
                                 }
-                                page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                                rendered.add(bitmap)
-                            } finally {
-                                page.close()
                             }
                         }
-                        pages = rendered
                     }
                 }
+                pages = rendered
             } catch (e: Exception) {
                 error = "Could not render PDF: ${e.message}"
             }

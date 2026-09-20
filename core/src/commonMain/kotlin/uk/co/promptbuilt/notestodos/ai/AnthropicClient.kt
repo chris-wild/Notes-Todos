@@ -132,6 +132,73 @@ class AnthropicClient {
         return IngredientParsing.parseResponse("{" + complete(body, apiKey))
     }
 
+    /**
+     * Names a photographed/attached recipe: returns a short title, or null when
+     * the model's answer can't be parsed (caller keeps its fallback title).
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun extractRecipeTitle(pdfBytes: ByteArray, apiKey: String): String? {
+        val base64 = Base64.encode(pdfBytes)
+        val body = buildJsonObject {
+            put("model", MODEL)
+            put("max_tokens", 100)
+            put(
+                "system",
+                "You name recipes. Return ONLY JSON: {\"title\": \"...\"} — a short, " +
+                    "natural recipe name for the dish in the document. No prose.",
+            )
+            put(
+                "messages",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put(
+                                "content",
+                                buildJsonArray {
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "document")
+                                            put(
+                                                "source",
+                                                buildJsonObject {
+                                                    put("type", "base64")
+                                                    put("media_type", "application/pdf")
+                                                    put("data", base64)
+                                                },
+                                            )
+                                        },
+                                    )
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "text")
+                                            put("text", "Name this recipe. Return JSON only.")
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    add(
+                        buildJsonObject {
+                            put("role", "assistant")
+                            put("content", "{")
+                        },
+                    )
+                },
+            )
+        }
+        return try {
+            val out = "{" + complete(body, apiKey)
+            ((Json.parseToJsonElement(out).jsonObject["title"] as? JsonPrimitive)?.content)
+                ?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+        } catch (e: AiUnauthorizedException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** POSTs a Messages request and returns content[0].text. */
     private suspend fun complete(body: JsonObject, apiKey: String): String {
         val reply = httpSend(

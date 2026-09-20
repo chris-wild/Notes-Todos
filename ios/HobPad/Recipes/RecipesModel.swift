@@ -7,6 +7,7 @@ final class RecipesModel {
     private let core: CoreServices
 
     private(set) var recipes: [RecipeEntity] = []
+    private(set) var attachments: [Int64: [RecipeAttachmentEntity]] = [:]
     var query = ""
     private(set) var hasKey = false
     private(set) var working: String?
@@ -23,14 +24,23 @@ final class RecipesModel {
         }
     }
 
-    func pdfPath(_ recipe: RecipeEntity) -> String? {
-        guard let name = recipe.pdfFileName else { return nil }
-        return core.recipeStore.path(fileName: name)
+    func attachments(for recipe: RecipeEntity) -> [RecipeAttachmentEntity] {
+        attachments[recipe.id] ?? []
+    }
+
+    func pdfPath(_ attachment: RecipeAttachmentEntity) -> String {
+        core.recipeStore.path(fileName: attachment.fileName)
     }
 
     func observeRecipes() async {
         for await list in core.recipesRepository.observeRecipes() {
             recipes = list
+        }
+    }
+
+    func observeAttachments() async {
+        for await list in core.recipesRepository.observeAttachments() {
+            attachments = Dictionary(grouping: list, by: { $0.recipeId })
         }
     }
 
@@ -40,13 +50,19 @@ final class RecipesModel {
         }
     }
 
-    /// newAttachment: already-converted PDF bytes + display name, or nil.
+    /// Writes already-converted PDF bytes into the store; returns the stored file name.
+    private func storePdf(_ data: Data) throws -> String {
+        let fileName = UUID().uuidString + ".pdf"
+        try data.write(to: URL(fileURLWithPath: core.recipeStore.path(fileName: fileName)))
+        return fileName
+    }
+
     func save(
         id: Int64?,
         name: String,
         notes: String,
-        newAttachment: (data: Data, originalName: String)?,
-        removeAttachment: Bool,
+        newAttachments: [(data: Data, originalName: String)],
+        removals: [RecipeAttachmentEntity],
     ) {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
             message = "Recipe name is required"
@@ -61,18 +77,15 @@ final class RecipesModel {
                 } else {
                     recipeId = try await core.recipesRepository.create(name: name, notes: notes).int64Value
                 }
-                let existing = try await core.recipesRepository.getById(id: recipeId)
-                if let attachment = newAttachment {
-                    if let old = existing?.pdfFileName { core.recipeStore.delete(fileName: old) }
-                    let fileName = UUID().uuidString + ".pdf"
-                    let path = core.recipeStore.path(fileName: fileName)
-                    try attachment.data.write(to: URL(fileURLWithPath: path))
-                    try await core.recipesRepository.setAttachment(
-                        id: recipeId, pdfFileName: fileName, pdfOriginalName: attachment.originalName,
+                for removal in removals {
+                    core.recipeStore.delete(fileName: removal.fileName)
+                    try await core.recipesRepository.removeAttachment(attachmentId: removal.id)
+                }
+                for attachment in newAttachments {
+                    let fileName = try storePdf(attachment.data)
+                    _ = try await core.recipesRepository.addAttachment(
+                        recipeId: recipeId, fileName: fileName, originalName: attachment.originalName,
                     )
-                } else if removeAttachment, let old = existing?.pdfFileName {
-                    core.recipeStore.delete(fileName: old)
-                    try await core.recipesRepository.setAttachment(id: recipeId, pdfFileName: nil, pdfOriginalName: nil)
                 }
             } catch {
                 message = "Save failed: \(error.localizedDescription)"
@@ -82,8 +95,49 @@ final class RecipesModel {
 
     func delete(_ recipe: RecipeEntity) {
         Task {
-            if let name = recipe.pdfFileName { core.recipeStore.delete(fileName: name) }
-            try? await core.recipesRepository.delete(id: recipe.id)
+            do {
+                let mine = try await core.recipesRepository.getAttachments(recipeId: recipe.id)
+                for attachment in mine {
+                    core.recipeStore.delete(fileName: attachment.fileName)
+                }
+                try await core.recipesRepository.delete(id: recipe.id)
+            } catch {
+                message = "Delete failed: \(error.localizedDescription)"
+            }
+        }
+    }
+
+    /// "Take photo of recipe": image data -> PDF -> new recipe, named by Claude
+    /// when a key is stored.
+    func createFromCapture(imageData: Data) {
+        guard let pdf = ImageToPDF.convert(imageData) else {
+            message = "Could not convert the photo to a PDF"
+            return
+        }
+        working = "Creating recipe…"
+        Task {
+            defer { working = nil }
+            do {
+                let fileName = try storePdf(pdf)
+                let recipeId = try await core.recipesRepository
+                    .create(name: "Photographed recipe", notes: "").int64Value
+                _ = try await core.recipesRepository.addAttachment(
+                    recipeId: recipeId, fileName: fileName, originalName: "photo.jpg",
+                )
+                if hasKey {
+                    working = "Naming recipe…"
+                    if let title = try await core.extractRecipeTitle(pdfData: pdf) {
+                        try await core.recipesRepository.update(id: recipeId, name: title, notes: "")
+                        message = "Recipe \"\(title)\" created from photo"
+                    } else {
+                        message = "Recipe created from photo"
+                    }
+                } else {
+                    message = "Recipe created from photo (add an API key for automatic naming)"
+                }
+            } catch {
+                message = "Could not create recipe: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -155,3 +209,4 @@ final class RecipesModel {
         }
     }
 }
+

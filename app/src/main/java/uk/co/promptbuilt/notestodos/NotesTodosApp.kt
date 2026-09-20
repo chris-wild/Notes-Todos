@@ -24,7 +24,7 @@ class NotesTodosApp : Application() {
         TodosRepository(database, database.todoDao(), database.todoCategoryDao())
     }
     val recipesRepository by lazy {
-        RecipesRepository(database, database.recipeDao(), database.ingredientDao())
+        RecipesRepository(database, database.recipeDao(), database.ingredientDao(), database.recipeAttachmentDao())
     }
     val settingsRepository by lazy { SettingsRepository(createSettingsDataStore(this)) }
 

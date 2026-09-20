@@ -86,9 +86,16 @@ private struct NotesContent: View {
                 }
             }
             .sheet(item: $editingNote) { note in
-                NoteEditorSheet(title: note.title, content: note.content) { title, content in
-                    model.save(id: note.id, title: title, content: content)
-                }
+                NoteSheet(
+                    note: note,
+                    onSave: { title, content in
+                        model.save(id: note.id, title: title, content: content)
+                    },
+                    onDelete: {
+                        editingNote = nil
+                        deleteTarget = note
+                    },
+                )
             }
             .confirmationDialog(
                 "Delete note?",
@@ -153,6 +160,69 @@ private struct NotesContent: View {
         .contextMenu {
             Button(note.pinned ? "Unpin" : "Pin") { model.togglePin(note) }
             Button("Delete", role: .destructive) { deleteTarget = note }
+        }
+    }
+}
+
+/// Opening a note shows a read-only VIEW (links tappable) with an obvious Edit
+/// button; Edit switches to the editor in place.
+private struct NoteSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let note: NoteEntity
+    let onSave: (String, String) -> Void
+    let onDelete: () -> Void
+
+    @State private var editing = false
+    @State private var title = ""
+    @State private var content = ""
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if editing {
+                    Form {
+                        TextField("Title", text: $title)
+                        TextField("Take a note…", text: $content, axis: .vertical)
+                            .lineLimit(8...30)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if !note.title.isEmpty {
+                                Text(note.title).font(.title2.bold())
+                            }
+                            LinkifiedText(text: note.content)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle(editing ? "Edit Note" : "Note")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                }
+                if editing {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            onSave(title, content)
+                            dismiss()
+                        }
+                    }
+                } else {
+                    ToolbarItemGroup(placement: .topBarTrailing) {
+                        Button("Delete", role: .destructive, action: onDelete)
+                        Button("Edit") {
+                            title = note.title
+                            content = note.content
+                            editing = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
         }
     }
 }

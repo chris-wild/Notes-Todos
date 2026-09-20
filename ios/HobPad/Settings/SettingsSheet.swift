@@ -87,14 +87,26 @@ struct SettingsSheet: View {
                 exportDocument = nil
             }
             .fileImporter(isPresented: $importOpen, allowedContentTypes: [.zip, .data]) { result in
-                if case .success(let url) = result {
+                // Diagnosed on-device: a swallowed read failure here once looked
+                // like a successful import. Every failure now names itself, and
+                // the confirm dialog shows the byte count so an empty read is
+                // impossible to miss.
+                switch result {
+                case .success(let url):
                     let scoped = url.startAccessingSecurityScopedResource()
                     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    if let data = try? Data(contentsOf: url) {
+                    do {
+                        let data = try Data(contentsOf: url)
+                        guard !data.isEmpty else {
+                            model.message = "Import failed: \(url.lastPathComponent) is empty"
+                            return
+                        }
                         confirmImportData = data
-                    } else {
-                        model.message = "Could not read the selected file"
+                    } catch {
+                        model.message = "Import failed reading \(url.lastPathComponent): \(error.localizedDescription)"
                     }
+                case .failure(let error):
+                    model.message = "Picker failed: \(error.localizedDescription)"
                 }
             }
             .alert(
@@ -107,7 +119,10 @@ struct SettingsSheet: View {
                     confirmImportData = nil
                 }
             } message: {
-                Text("Importing replaces every note, todo, category and recipe on this device with the backup's contents.")
+                let size = ByteCountFormatter.string(
+                    fromByteCount: Int64(confirmImportData?.count ?? 0), countStyle: .file,
+                )
+                Text("Importing this \(size) backup replaces every note, todo, category and recipe on this device.")
             }
         }
     }

@@ -31,6 +31,30 @@ interface RecipeDao {
 }
 
 @Dao
+interface RecipeAttachmentDao {
+    @Query("SELECT * FROM recipe_attachments ORDER BY position ASC, id ASC")
+    fun observeAll(): Flow<List<RecipeAttachmentEntity>>
+
+    @Query("SELECT * FROM recipe_attachments WHERE recipeId = :recipeId ORDER BY position ASC, id ASC")
+    suspend fun getForRecipe(recipeId: Long): List<RecipeAttachmentEntity>
+
+    @Query("SELECT COALESCE(MAX(position), -1) FROM recipe_attachments WHERE recipeId = :recipeId")
+    suspend fun maxPosition(recipeId: Long): Int
+
+    @Insert
+    suspend fun insert(attachment: RecipeAttachmentEntity): Long
+
+    @Insert
+    suspend fun insertAll(attachments: List<RecipeAttachmentEntity>)
+
+    @Query("DELETE FROM recipe_attachments WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM recipe_attachments")
+    suspend fun deleteAll()
+}
+
+@Dao
 interface IngredientDao {
     @Query("SELECT * FROM ingredients WHERE recipeId = :recipeId ORDER BY id ASC")
     suspend fun getForRecipe(recipeId: Long): List<IngredientEntity>

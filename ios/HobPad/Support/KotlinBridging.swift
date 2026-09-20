@@ -8,6 +8,7 @@ extension NoteEntity: @unchecked @retroactive Sendable {}
 extension TodoEntity: @unchecked @retroactive Sendable {}
 extension TodoCategoryEntity: @unchecked @retroactive Sendable {}
 extension RecipeEntity: @unchecked @retroactive Sendable {}
+extension RecipeAttachmentEntity: @unchecked @retroactive Sendable {}
 extension IngredientEntity: @unchecked @retroactive Sendable {}
 extension ImportSummary: @unchecked @retroactive Sendable {}
 

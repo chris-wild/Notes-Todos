@@ -26,7 +26,7 @@ class CoreServices(secretStore: SecretStore) {
 
     val notesRepository = NotesRepository(database.noteDao())
     val todosRepository = TodosRepository(database, database.todoDao(), database.todoCategoryDao())
-    val recipesRepository = RecipesRepository(database, database.recipeDao(), database.ingredientDao())
+    val recipesRepository = RecipesRepository(database, database.recipeDao(), database.ingredientDao(), database.recipeAttachmentDao())
     val settingsRepository = SettingsRepository(createSettingsDataStore())
 
     val secureKeys = SecureKeys(secretStore)
@@ -42,4 +42,10 @@ class CoreServices(secretStore: SecretStore) {
 
     suspend fun importBackup(data: NSData): ImportSummary =
         backupManager.importBytes(data.toByteArray())
+
+    /** Names a photographed recipe; null when no key is stored or naming fails. */
+    suspend fun extractRecipeTitle(pdfData: NSData): String? {
+        val apiKey = secureKeys.getAnthropicKey() ?: return null
+        return anthropicClient.extractRecipeTitle(pdfData.toByteArray(), apiKey)
+    }
 }

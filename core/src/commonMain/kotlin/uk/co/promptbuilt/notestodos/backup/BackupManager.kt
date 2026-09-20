@@ -19,15 +19,17 @@ class BackupManager(
 
     suspend fun exportBytes(): ByteArray {
         val recipes = db.recipeDao().observeAll().first()
+        val attachments = db.recipeAttachmentDao().observeAll().first()
         val ingredients = recipes.flatMap { db.ingredientDao().getForRecipe(it.id) }
-        val pdfs = recipes.mapNotNull { it.pdfFileName }
-            .mapNotNull { name -> recipeStore.read(name)?.let { name to it } }
+        val pdfs = attachments
+            .mapNotNull { a -> recipeStore.read(a.fileName)?.let { a.fileName to it } }
             .toMap()
         val data = BackupData(
             notes = db.noteDao().observeAll().first(),
             todos = db.todoDao().observeAll().first(),
             categories = db.todoCategoryDao().observeAll().first(),
             recipes = recipes,
+            attachments = attachments,
             ingredients = ingredients,
             pdfs = pdfs,
         )
@@ -43,6 +45,7 @@ class BackupManager(
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction {
                 db.ingredientDao().deleteAll()
+                db.recipeAttachmentDao().deleteAll()
                 db.recipeDao().deleteAll()
                 db.todoDao().deleteAll()
                 db.todoCategoryDao().deleteAll()
@@ -52,6 +55,7 @@ class BackupManager(
                 db.todoCategoryDao().insertAll(data.categories)
                 db.todoDao().insertAll(data.todos)
                 db.recipeDao().insertAll(data.recipes)
+                db.recipeAttachmentDao().insertAll(data.attachments)
                 db.ingredientDao().insertAll(data.ingredients)
             }
         }

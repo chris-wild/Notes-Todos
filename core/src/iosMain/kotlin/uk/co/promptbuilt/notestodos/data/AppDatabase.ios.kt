@@ -8,6 +8,7 @@ import platform.Foundation.NSDocumentDirectory
 import platform.Foundation.NSSearchPathForDirectoriesInDomains
 import platform.Foundation.NSUserDomainMask
 import uk.co.promptbuilt.notestodos.data.db.AppDatabase
+import uk.co.promptbuilt.notestodos.data.db.MIGRATION_1_2
 
 /**
  * iOS database builder: Documents/notes-todos.db (covered by device backup),
@@ -20,5 +21,6 @@ fun buildAppDatabase(): AppDatabase {
     return Room.databaseBuilder<AppDatabase>(name = "$documents/notes-todos.db")
         .setDriver(BundledSQLiteDriver())
         .setQueryCoroutineContext(Dispatchers.IO)
+        .addMigrations(MIGRATION_1_2)
         .build()
 }

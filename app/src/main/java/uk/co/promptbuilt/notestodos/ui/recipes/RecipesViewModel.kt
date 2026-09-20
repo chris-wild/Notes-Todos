@@ -9,16 +9,18 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
 import uk.co.promptbuilt.notestodos.ai.AnthropicClient
+import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
 import uk.co.promptbuilt.notestodos.backup.SafBackup
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
 import uk.co.promptbuilt.notestodos.data.RecipesRepository
 import uk.co.promptbuilt.notestodos.data.SecureKeys
+import uk.co.promptbuilt.notestodos.data.db.RecipeAttachmentEntity
 import uk.co.promptbuilt.notestodos.data.db.RecipeEntity
 
 data class RecipesUiState(
     val recipes: List<RecipeEntity> = emptyList(),
+    val attachmentsByRecipe: Map<Long, List<RecipeAttachmentEntity>> = emptyMap(),
     val query: String = "",
     /** True when an Anthropic key is stored (replaces GET /api/features). */
     val ingredientAutomation: Boolean = false,
@@ -43,25 +45,25 @@ class RecipesViewModel(
 
     val uiState: StateFlow<RecipesUiState> = combine(
         repository.observeRecipes(),
+        repository.observeAttachments(),
         query,
         secureKeys.hasAnthropicKey,
-        working,
-        message,
-    ) { recipes, q, hasKey, workingText, messageText ->
+        combine(working, message) { w, m -> w to m },
+    ) { recipes, attachments, q, hasKey, workingMessage ->
         val filtered = if (q.isBlank()) {
             recipes
         } else {
-            // Matches server-side search over name/notes (datastore.js:453).
             recipes.filter {
                 it.name.contains(q, ignoreCase = true) || it.notes.contains(q, ignoreCase = true)
             }
         }
         RecipesUiState(
             recipes = filtered,
+            attachmentsByRecipe = attachments.groupBy { it.recipeId },
             query = q,
             ingredientAutomation = hasKey,
-            working = workingText,
-            message = messageText,
+            working = workingMessage.first,
+            message = workingMessage.second,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecipesUiState())
 
@@ -93,8 +95,8 @@ class RecipesViewModel(
         id: Long?,
         name: String,
         notes: String,
-        newAttachment: RecipeFiles.Imported?,
-        removeAttachment: Boolean,
+        newAttachments: List<RecipeFiles.Imported>,
+        removals: List<RecipeAttachmentEntity>,
         onDone: () -> Unit,
     ) {
         if (name.isBlank()) {
@@ -102,24 +104,18 @@ class RecipesViewModel(
             return
         }
         viewModelScope.launch {
-            if (id == null) {
-                val recipeId = repository.create(name.trim(), notes)
-                if (newAttachment != null) {
-                    repository.setAttachment(recipeId, newAttachment.fileName, newAttachment.originalName)
-                }
+            val recipeId = if (id == null) {
+                repository.create(name.trim(), notes)
             } else {
-                val existing = repository.getById(id)
                 repository.update(id, name.trim(), notes)
-                when {
-                    newAttachment != null -> {
-                        recipeFiles.deleteIfPresent(existing?.pdfFileName)
-                        repository.setAttachment(id, newAttachment.fileName, newAttachment.originalName)
-                    }
-                    removeAttachment -> {
-                        recipeFiles.deleteIfPresent(existing?.pdfFileName)
-                        repository.setAttachment(id, null, null)
-                    }
-                }
+                id
+            }
+            for (removal in removals) {
+                recipeFiles.delete(removal.fileName)
+                repository.removeAttachment(removal.id)
+            }
+            for (imported in newAttachments) {
+                repository.addAttachment(recipeId, imported.fileName, imported.originalName)
             }
             onDone()
         }
@@ -127,8 +123,48 @@ class RecipesViewModel(
 
     fun deleteRecipe(recipe: RecipeEntity) {
         viewModelScope.launch {
-            recipeFiles.deleteIfPresent(recipe.pdfFileName)
+            repository.getAttachments(recipe.id).forEach { recipeFiles.delete(it.fileName) }
             repository.delete(recipe.id)
+        }
+    }
+
+    /**
+     * "Take photo of recipe": the captured image has already been converted to a
+     * PDF by importAttachment; create a recipe around it and name it with Claude
+     * when a key is present.
+     */
+    fun createFromCapture(imported: RecipeFiles.Imported) {
+        viewModelScope.launch {
+            working.value = "Creating recipe…"
+            try {
+                val recipeId = repository.create("Photographed recipe", "")
+                repository.addAttachment(recipeId, imported.fileName, imported.originalName)
+
+                val apiKey = secureKeys.getAnthropicKey()
+                val pdfBytes = recipeFiles.read(imported.fileName)
+                if (apiKey != null && pdfBytes != null) {
+                    working.value = "Naming recipe…"
+                    val title = try {
+                        anthropicClient.extractRecipeTitle(pdfBytes, apiKey)
+                    } catch (e: Exception) {
+                        message.value = "Could not name the recipe: ${e.message}"
+                        null
+                    }
+                    if (title != null) {
+                        repository.update(recipeId, title, "")
+                        message.value = "Recipe \"$title\" created from photo"
+                    } else if (message.value == null) {
+                        message.value = "Recipe created from photo"
+                    }
+                } else {
+                    message.value = "Recipe created from photo" +
+                        if (apiKey == null) " (add an API key for automatic naming)" else ""
+                }
+            } catch (e: Exception) {
+                message.value = "Could not create recipe: ${e.message}"
+            } finally {
+                working.value = null
+            }
         }
     }
 
@@ -150,7 +186,6 @@ class RecipesViewModel(
 
     /** Validates against the live API before storing, like PUT /api/anthropic-key. */
     fun saveAnthropicKey(key: String, onResult: (Boolean) -> Unit) {
-        // Keys never contain whitespace; strip anything a keyboard/paste snuck in.
         val cleaned = key.filterNot { it.isWhitespace() }
         if (cleaned.isEmpty()) {
             message.value = "Enter an API key"

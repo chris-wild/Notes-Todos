@@ -58,6 +58,7 @@ targets:
         # exported backups and drop zips there to import.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
+        NSCameraUsageDescription: HobPad uses the camera to photograph recipes so they can be saved as PDFs.
         UISupportedInterfaceOrientations~iphone:
           - UIInterfaceOrientationPortrait
         UISupportedInterfaceOrientations~ipad:
@@ -103,6 +104,14 @@ targets:
             VARIANT=debug
           fi
           STAGE="core/build/XCFrameworks/current/HobPadCore.xcframework"
-          rm -rf "$STAGE"
-          mkdir -p "core/build/XCFrameworks/current"
-          cp -R "core/build/XCFrameworks/$VARIANT/HobPadCore.xcframework" "$STAGE"
+          SRC="core/build/XCFrameworks/$VARIANT/HobPadCore.xcframework"
+          # Only restage when the framework actually changed: an unconditional copy
+          # refreshes mtimes and invalidates Xcode's precompiled module MID-build
+          # ("header modified since module built"). When core did change, run
+          # ./gradlew :core:assembleHobPadCore<Variant>XCFramework and restage
+          # BEFORE invoking xcodebuild for a first-try-clean build.
+          if ! diff -qr "$SRC" "$STAGE" >/dev/null 2>&1; then
+            rm -rf "$STAGE"
+            mkdir -p "core/build/XCFrameworks/current"
+            cp -R "$SRC" "$STAGE"
+          fi
