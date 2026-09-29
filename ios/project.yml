@@ -61,6 +61,11 @@ targets:
       path: HobPad/Info.plist
       properties:
         CFBundleDisplayName: HobPad
+        # The explicit info block writes LITERALS: without these substitutions XcodeGen
+        # emits CFBundleVersion "1" forever and the deploy.sh bump never reaches the
+        # binary (build 2 uploaded as build 1, 2026-09-29).
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         # Expose the app's Documents folder in the Files app: users can see
         # exported backups and drop zips there to import.
