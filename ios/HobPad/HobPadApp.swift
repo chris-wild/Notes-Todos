@@ -7,13 +7,14 @@ struct HobPadApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // Recipes first — the primary use case; it is also the launch tab.
             TabView {
-                NotesTab()
-                    .tabItem { Label("Notes", systemImage: "note.text") }
-                TodosTab()
-                    .tabItem { Label("Todos", systemImage: "checklist") }
                 RecipesTab()
                     .tabItem { Label("Recipes", systemImage: "fork.knife") }
+                TodosTab()
+                    .tabItem { Label("Todos", systemImage: "checklist") }
+                NotesTab()
+                    .tabItem { Label("Notes", systemImage: "note.text") }
             }
             .environment(services)
             .task { await services.ops.start() }

@@ -29,10 +29,11 @@ import uk.co.promptbuilt.notestodos.ui.notes.NotesScreen
 import uk.co.promptbuilt.notestodos.ui.recipes.RecipesScreen
 import uk.co.promptbuilt.notestodos.ui.todos.TodosScreen
 
+// Declaration order is the bar's order: recipes first — the primary use case.
 enum class Tab(val route: String, @param:StringRes val labelRes: Int, val icon: ImageVector) {
-    Notes("notes", R.string.tab_notes, Icons.AutoMirrored.Filled.StickyNote2),
-    Todos("todos", R.string.tab_todos, Icons.Filled.Checklist),
     Recipes("recipes", R.string.tab_recipes, Icons.Filled.RestaurantMenu),
+    Todos("todos", R.string.tab_todos, Icons.Filled.Checklist),
+    Notes("notes", R.string.tab_notes, Icons.AutoMirrored.Filled.StickyNote2),
 }
 
 @Composable
@@ -65,7 +66,7 @@ fun AppScaffold() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = Tab.Notes.route,
+            startDestination = Tab.Recipes.route,
             modifier = Modifier.padding(innerPadding),
         ) {
             composable(Tab.Notes.route) { NotesScreen() }
