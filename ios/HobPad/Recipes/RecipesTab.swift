@@ -66,16 +66,24 @@ private struct RecipesContent: View {
             .searchable(text: $model.query, prompt: "Search recipes")
             .toolbar {
                 ToolbarItemGroup(placement: .topBarTrailing) {
+                    // Accessibility labels sit on the images: on a toolbar Button the
+                    // modifier is silently dropped (observed with the UI test, Sept 2026).
                     if CameraCapture.isAvailable {
-                        Button { cameraOpen = true } label: { Image(systemName: "camera") }
+                        Button { cameraOpen = true } label: {
+                            Image(systemName: "camera").accessibilityLabel("Photograph recipe")
+                        }
                     } else {
                         // No camera (simulator / some iPads): photo library stands in.
                         PhotosPicker(selection: $cameraFallbackItem, matching: .images) {
-                            Image(systemName: "camera")
+                            Image(systemName: "camera").accessibilityLabel("Photograph recipe")
                         }
                     }
-                    Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
-                    Button { composing = true } label: { Image(systemName: "plus") }
+                    Button { settingsOpen = true } label: {
+                        Image(systemName: "gearshape").accessibilityLabel("Settings")
+                    }
+                    Button { composing = true } label: {
+                        Image(systemName: "plus").accessibilityLabel("Add recipe")
+                    }
                 }
             }
             .sheet(isPresented: $composing) {

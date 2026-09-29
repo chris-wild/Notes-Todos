@@ -41,7 +41,9 @@ struct PaywallSheet: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(product.displayName.isEmpty ? product.id : product.displayName)
                                 if let credits = OpsStore.packCredits[product.id] {
-                                    Text("\(credits) conversions")
+                                    // Per-conversion price in the buyer's own currency —
+                                    // the display name already says the count.
+                                    Text("\((product.price / Decimal(credits)).formatted(product.priceFormatStyle)) per conversion")
                                         .font(.footnote)
                                         .foregroundStyle(.secondary)
                                 }

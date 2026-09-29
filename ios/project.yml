@@ -35,11 +35,16 @@ schemes:
     build:
       targets:
         HobPad: all
+        HobPadUITests: [test]
     run:
       config: Debug
       # Local StoreKit products for simulator testing (Xcode-signed transactions take the
       # staging Worker's TEST_MODE path; real signatures come from sandbox on a device).
       storeKitConfiguration: HobPad/Store/Products.storekit
+    test:
+      config: Debug
+      targets:
+        - HobPadUITests
     archive:
       config: Release
 
@@ -118,3 +123,19 @@ targets:
             mkdir -p "core/build/XCFrameworks/current"
             cp -R "$SRC" "$STAGE"
           fi
+  # Drives the app under the scheme's StoreKit configuration for the paywall review
+  # screenshot (scripts/ios-paywall-screenshot.sh); not part of any release build.
+  HobPadUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: HobPadUITests
+      # SKTestSession loads the store config from the TEST bundle at runtime.
+      - path: HobPad/Store/Products.storekit
+        buildPhase: resources
+    dependencies:
+      - target: HobPad
+    settings:
+      base:
+        TEST_TARGET_NAME: HobPad
+        GENERATE_INFOPLIST_FILE: "YES"
