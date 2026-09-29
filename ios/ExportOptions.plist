@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- App Store Connect / TestFlight distribution (RiderNav conventions). -->
+    <key>method</key>
+    <string>app-store-connect</string>
+    <!-- Upload straight to App Store Connect as part of the export step. -->
+    <key>destination</key>
+    <string>upload</string>
+    <key>teamID</key>
+    <string>U9RDY3V58L</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>uploadSymbols</key>
+    <true/>
+    <!-- Never let the export renumber a build: a collision with App Store Connect must
+         fail so project.yml and TestFlight agree (RiderNav lesson, 2026-09-04). -->
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+</dict>
+</plist>
