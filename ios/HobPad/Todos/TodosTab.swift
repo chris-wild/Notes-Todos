@@ -56,11 +56,21 @@ private struct TodosContent: View {
                         .swipeActions {
                             Button("Delete", role: .destructive) { model.delete(todo) }
                         }
+                        .contextMenu {
+                            Button("Delete", role: .destructive) { model.delete(todo) }
+                        }
+                    }
+                    .onDelete { offsets in
+                        for todo in offsets.map({ model.visibleTodos[$0] }) { model.delete(todo) }
                     }
                 }
                 .listStyle(.plain)
             }
             .navigationTitle("Todos")
+            .toolbar {
+                // Standard list editing: the visible route to deletion (swipe still works).
+                EditButton()
+            }
             .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
             .task { await model.observeCategories() }

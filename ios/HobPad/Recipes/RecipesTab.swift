@@ -59,6 +59,11 @@ private struct RecipesContent: View {
                         Button("Delete", role: .destructive) { deleteTarget = recipe }
                         Button("Edit") { editingRecipe = recipe }.tint(.blue)
                     }
+                    // Swipe is invisible until you know it exists; long-press offers the same.
+                    .contextMenu {
+                        Button("Edit") { editingRecipe = recipe }
+                        Button("Delete", role: .destructive) { deleteTarget = recipe }
+                    }
                 }
             }
             .listStyle(.plain)
@@ -93,7 +98,13 @@ private struct RecipesContent: View {
                 RecipeEditorSheet(model: model, recipe: recipe)
             }
             .sheet(item: $viewingRecipe) { recipe in
-                RecipeViewerSheet(model: model, recipe: recipe)
+                RecipeViewerSheet(model: model, recipe: recipe) {
+                    // Edit from the viewer: swap sheets once the dismissal settles.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(600))
+                        editingRecipe = recipe
+                    }
+                }
             }
             .sheet(isPresented: $settingsOpen) {
                 SettingsSheet(model: model)
@@ -172,7 +183,9 @@ private struct RecipeViewerSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var model: RecipesModel
     let recipe: RecipeEntity
+    let onEdit: () -> Void
     @State private var fullScreenPath: FullScreenPdf?
+    @State private var confirmDelete = false
 
     private struct FullScreenPdf: Identifiable {
         let id: String
@@ -227,6 +240,18 @@ private struct RecipeViewerSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // The visible route to Edit/Delete (swipe on the list also works).
+                    Menu {
+                        Button("Edit Recipe") {
+                            dismiss()
+                            onEdit()
+                        }
+                        Button("Delete Recipe", role: .destructive) { confirmDelete = true }
+                    } label: {
+                        Image(systemName: "ellipsis.circle").accessibilityLabel("Recipe actions")
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create ingredient list") {
                         Task {
@@ -259,6 +284,18 @@ private struct RecipeViewerSheet: View {
             }
             .sheet(isPresented: $paywallOpen) {
                 PaywallSheet(ops: model.ops)
+            }
+            .confirmationDialog(
+                "Delete recipe?",
+                isPresented: $confirmDelete,
+                titleVisibility: .visible,
+            ) {
+                Button("Delete", role: .destructive) {
+                    model.delete(recipe)
+                    dismiss()
+                }
+            } message: {
+                Text("\"\(recipe.name)\" and its attachments will be permanently deleted.")
             }
             .onChange(of: model.paywallNeeded) {
                 // The server's page count disagreed with the preview and the balance fell
