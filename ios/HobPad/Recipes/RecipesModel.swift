@@ -32,6 +32,26 @@ final class RecipesModel {
         #endif
     }
 
+    /// How to gate a "Create ingredient list" tap.
+    enum ConversionGate {
+        case run                 // no credits involved: BYO key, or a cached re-run
+        case confirm(cost: Int)  // will spend credits; ask first
+        case paywall             // not enough credits for the preview cost
+    }
+
+    /// Decides the gate BEFORE showing any credit copy: a recipe whose ingredients were
+    /// already extracted re-runs from the cache (IngredientTodosUseCase short-circuits, no
+    /// API call, no charge), so it must never ask about credits.
+    func conversionGate(for recipe: RecipeEntity) async -> ConversionGate {
+        if usesByoKey { return .run }
+        if let cached = try? await core.recipesRepository.getIngredients(recipeId: recipe.id),
+           !cached.isEmpty {
+            return .run
+        }
+        let cost = opsCost(for: recipe)
+        return (ops.balance ?? 0) < cost ? .paywall : .confirm(cost: cost)
+    }
+
     /// What converting [recipe] will cost, mirroring the server's billing: one op per PDF
     /// page across its attachments, or one op for a notes-only recipe. A preview only —
     /// the Worker's own page count is what actually gets charged.

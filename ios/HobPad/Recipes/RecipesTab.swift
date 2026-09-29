@@ -220,15 +220,14 @@ private struct RecipeViewerSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create ingredient list") {
-                        if model.usesByoKey {
-                            // Dev builds on a personal key: no credits involved.
-                            model.createIngredients(for: recipe) { dismiss() }
-                        } else {
-                            let cost = model.opsCost(for: recipe)
-                            if (model.ops.balance ?? 0) < cost {
-                                paywallOpen = true
-                            } else {
+                        Task {
+                            switch await model.conversionGate(for: recipe) {
+                            case .run:
+                                model.createIngredients(for: recipe) { dismiss() }
+                            case .confirm(let cost):
                                 confirmCost = cost
+                            case .paywall:
+                                paywallOpen = true
                             }
                         }
                     }
