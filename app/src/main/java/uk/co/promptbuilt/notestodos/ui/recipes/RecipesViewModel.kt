@@ -169,11 +169,11 @@ class RecipesViewModel(
     }
 
     /** Port of the web "Create ingredient list" action; navigates to Todos on success. */
-    fun createIngredientTodos(recipeId: Long, onSuccess: () -> Unit) {
+    fun createIngredientTodos(recipeId: Long, multiplier: Int = 1, onSuccess: () -> Unit) {
         viewModelScope.launch {
             working.value = "Extracting ingredients…"
             try {
-                val outcome = ingredientTodos.run(recipeId)
+                val outcome = ingredientTodos.run(recipeId, multiplier)
                 message.value = "Added ${outcome.count} ingredients to \"${outcome.category}\""
                 onSuccess()
             } catch (e: Exception) {

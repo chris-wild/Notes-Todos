@@ -34,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -237,8 +238,8 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             recipeFiles = app.recipeFiles,
             ingredientAutomation = state.ingredientAutomation,
             working = state.working != null,
-            onCreateIngredients = {
-                viewModel.createIngredientTodos(recipe.id) {
+            onCreateIngredients = { multiplier ->
+                viewModel.createIngredientTodos(recipe.id, multiplier) {
                     viewingRecipe = null
                     onOpenTodos()
                 }
@@ -465,9 +466,12 @@ private fun RecipeViewerDialog(
     recipeFiles: RecipeFiles,
     ingredientAutomation: Boolean,
     working: Boolean,
-    onCreateIngredients: () -> Unit,
+    onCreateIngredients: (Int) -> Unit,
     onClose: () -> Unit,
 ) {
+    // Scales the shopping list (cooking for more): quantities are multiplied when the
+    // ingredient list is created; a cached recipe re-runs free at any multiplier.
+    var multiplier by remember { mutableIntStateOf(1) }
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -486,11 +490,22 @@ private fun RecipeViewerDialog(
                         modifier = Modifier.weight(1f),
                     )
                     if (ingredientAutomation) {
-                        TextButton(onClick = onCreateIngredients, enabled = !working) {
+                        TextButton(onClick = { onCreateIngredients(multiplier) }, enabled = !working) {
                             Text("Create ingredient list")
                         }
                     }
                     TextButton(onClick = onClose) { Text("Close") }
+                }
+                if (ingredientAutomation) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Quantities ×$multiplier",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { if (multiplier > 1) multiplier-- }, enabled = multiplier > 1) { Text("−") }
+                        TextButton(onClick = { if (multiplier < 10) multiplier++ }, enabled = multiplier < 10) { Text("+") }
+                    }
                 }
                 if (recipe.notes.isNotBlank()) {
                     Text(

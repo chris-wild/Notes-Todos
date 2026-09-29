@@ -25,18 +25,21 @@ class IngredientTodosUseCase(
     // @Throws matters: without it, SKIE's async bridge treats a Kotlin exception as an
     // UNHANDLED coroutine failure and terminates the iOS app instead of throwing to Swift
     // (diagnosed in the simulator, Sept 2026 — a 502 from the metering Worker killed the app).
+    // [multiplier] scales every quantity (a ×3 shopping trip); the CACHE always holds the
+    // ×1 amalgamated list, so re-running at a different multiplier costs nothing.
     @Throws(Exception::class)
-    suspend fun run(recipeId: Long): Outcome {
+    suspend fun run(recipeId: Long, multiplier: Int = 1): Outcome {
         val recipe = recipes.getById(recipeId)
             ?: throw IllegalStateException("Recipe not found")
 
         val cached = recipes.getIngredients(recipeId)
         val hasCached = cached.isNotEmpty()
 
-        val ingredients: List<String> = if (hasCached) {
-            cached.map { row ->
-                if (!row.quantity.isNullOrBlank()) "${row.quantity} ${row.name}".trim() else row.name
-            }
+        val lines: List<IngredientLine> = if (hasCached) {
+            // Amalgamate cached rows too: caches written before merging existed stay usable.
+            IngredientMath.amalgamate(
+                cached.map { row -> IngredientLine(row.name, row.quantity?.takeIf { it.isNotBlank() }) },
+            )
         } else {
             val attachments = recipes.getAttachments(recipeId)
             val extracted = if (attachments.isNotEmpty()) {
@@ -54,18 +57,25 @@ class IngredientTodosUseCase(
                 }
                 ocr.extractIngredientsFromText(text, recipe.name)
             }
-            if (extracted.isNotEmpty()) {
+            // "3 garlic cloves" for the sauce + "6 garlic cloves" for the dish -> "9 garlic cloves".
+            val merged = IngredientMath.amalgamate(
+                extracted.map { ing ->
+                    val (name, quantity) = IngredientParsing.splitQuantity(ing)
+                    IngredientLine(name, quantity)
+                },
+            )
+            if (merged.isNotEmpty()) {
                 val now = nowMillis()
                 recipes.replaceIngredients(
                     recipeId,
-                    extracted.map { ing ->
-                        val (name, quantity) = IngredientParsing.splitQuantity(ing)
-                        IngredientEntity(recipeId = recipeId, name = name, quantity = quantity, createdAt = now)
+                    merged.map { line ->
+                        IngredientEntity(recipeId = recipeId, name = line.name, quantity = line.quantity, createdAt = now)
                     },
                 )
             }
-            extracted
+            merged
         }
+        val ingredients = IngredientMath.scale(lines, multiplier).map { IngredientMath.format(it) }
 
         val categoryName = recipe.name.trim().ifEmpty { "Recipe" }
         todos.addCategory(categoryName) // no-op when it already exists

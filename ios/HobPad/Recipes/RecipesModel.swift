@@ -186,12 +186,12 @@ final class RecipesModel {
         }
     }
 
-    func createIngredients(for recipe: RecipeEntity, onSuccess: @escaping () -> Void) {
+    func createIngredients(for recipe: RecipeEntity, multiplier: Int = 1, onSuccess: @escaping () -> Void) {
         working = "Extracting ingredients…"
         Task {
             defer { working = nil }
             do {
-                let outcome = try await core.ingredientTodosUseCase.run(recipeId: recipe.id)
+                let outcome = try await core.ingredientTodosUseCase.run(recipeId: recipe.id, multiplier: Int32(multiplier))
                 message = "Added \(outcome.count) ingredients to \"\(outcome.category)\""
                 onSuccess()
             } catch {

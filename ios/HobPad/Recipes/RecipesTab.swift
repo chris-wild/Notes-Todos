@@ -181,11 +181,20 @@ private struct RecipeViewerSheet: View {
 
     @State private var confirmCost: Int?
     @State private var paywallOpen = false
+    @State private var multiplier = 1
 
     var body: some View {
         let attachments = model.attachments(for: recipe)
         NavigationStack {
             VStack(alignment: .leading, spacing: 8) {
+                // Scales the shopping list (cooking for more): quantities are multiplied
+                // when the ingredient list is created. Cached recipes re-run free at any ×.
+                Stepper(value: $multiplier, in: 1...10) {
+                    Text(multiplier == 1 ? "Quantities ×1" : "Quantities ×\(multiplier)")
+                        .font(.subheadline)
+                        .fontWeight(multiplier == 1 ? .regular : .semibold)
+                }
+                .padding(.horizontal)
                 if !recipe.notes.isEmpty {
                     ScrollView {
                         Text(recipe.notes)
@@ -223,7 +232,7 @@ private struct RecipeViewerSheet: View {
                         Task {
                             switch await model.conversionGate(for: recipe) {
                             case .run:
-                                model.createIngredients(for: recipe) { dismiss() }
+                                model.createIngredients(for: recipe, multiplier: multiplier) { dismiss() }
                             case .confirm(let cost):
                                 confirmCost = cost
                             case .paywall:
@@ -241,7 +250,7 @@ private struct RecipeViewerSheet: View {
             ) {
                 Button("Convert") {
                     confirmCost = nil
-                    model.createIngredients(for: recipe) { dismiss() }
+                    model.createIngredients(for: recipe, multiplier: multiplier) { dismiss() }
                 }
             } message: {
                 let cost = confirmCost ?? 1
