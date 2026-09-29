@@ -16,6 +16,7 @@ struct HobPadApp: App {
                     .tabItem { Label("Recipes", systemImage: "fork.knife") }
             }
             .environment(services)
+            .task { await services.ops.start() }
         }
     }
 }

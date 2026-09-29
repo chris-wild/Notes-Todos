@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Observation
 import HobPadCore
@@ -5,6 +6,7 @@ import HobPadCore
 @Observable @MainActor
 final class RecipesModel {
     private let core: CoreServices
+    let ops: OpsStore
 
     private(set) var recipes: [RecipeEntity] = []
     private(set) var attachments: [Int64: [RecipeAttachmentEntity]] = [:]
@@ -12,9 +14,35 @@ final class RecipesModel {
     private(set) var hasKey = false
     private(set) var working: String?
     var message: String?
+    /// Set when an extraction needs more credits than remain; the viewer opens the paywall.
+    var paywallNeeded = false
 
-    init(core: CoreServices) {
+    init(core: CoreServices, ops: OpsStore) {
         self.core = core
+        self.ops = ops
+    }
+
+    /// Debug builds with a stored personal key bypass metering entirely (BYO path);
+    /// released builds always meter, so the key never gates anything there.
+    var usesByoKey: Bool {
+        #if DEBUG
+        return hasKey
+        #else
+        return false
+        #endif
+    }
+
+    /// What converting [recipe] will cost, mirroring the server's billing: one op per PDF
+    /// page across its attachments, or one op for a notes-only recipe. A preview only —
+    /// the Worker's own page count is what actually gets charged.
+    func opsCost(for recipe: RecipeEntity) -> Int {
+        let mine = attachments(for: recipe)
+        guard !mine.isEmpty else { return 1 }
+        let pages = mine.reduce(0) { total, attachment in
+            let url = URL(fileURLWithPath: pdfPath(attachment)) as CFURL
+            return total + (CGPDFDocument(url).map { $0.numberOfPages } ?? 1)
+        }
+        return max(1, pages)
     }
 
     var filtered: [RecipeEntity] {
@@ -107,8 +135,9 @@ final class RecipesModel {
         }
     }
 
-    /// "Take photo of recipe": image data -> PDF -> new recipe, named by Claude
-    /// when a key is stored.
+    /// "Take photo of recipe": image data -> PDF -> new recipe, named by Claude. Naming is
+    /// free (the metered /v1/title endpoint never charges), so it is always attempted; a
+    /// failure just keeps the fallback name.
     func createFromCapture(imageData: Data) {
         guard let pdf = ImageToPDF.convert(imageData) else {
             message = "Could not convert the photo to a PDF"
@@ -124,16 +153,12 @@ final class RecipesModel {
                 _ = try await core.recipesRepository.addAttachment(
                     recipeId: recipeId, fileName: fileName, originalName: "photo.jpg",
                 )
-                if hasKey {
-                    working = "Naming recipe…"
-                    if let title = try await core.extractRecipeTitle(pdfData: pdf) {
-                        try await core.recipesRepository.update(id: recipeId, name: title, notes: "")
-                        message = "Recipe \"\(title)\" created from photo"
-                    } else {
-                        message = "Recipe created from photo"
-                    }
+                working = "Naming recipe…"
+                if let title = try await core.extractRecipeTitle(pdfData: pdf) {
+                    try await core.recipesRepository.update(id: recipeId, name: title, notes: "")
+                    message = "Recipe \"\(title)\" created from photo"
                 } else {
-                    message = "Recipe created from photo (add an API key for automatic naming)"
+                    message = "Recipe created from photo"
                 }
             } catch {
                 message = "Could not create recipe: \(error.localizedDescription)"
@@ -151,7 +176,13 @@ final class RecipesModel {
                 onSuccess()
             } catch {
                 message = error.localizedDescription
+                // The Worker's 402 crosses the Kotlin bridge as this message prefix
+                // (InsufficientOpsException in MeteredOcrClient.kt — keep the wording in step).
+                if error.localizedDescription.contains("Not enough conversion credits") {
+                    paywallNeeded = true
+                }
             }
+            if !usesByoKey { await ops.refreshBalance() }
         }
     }
 

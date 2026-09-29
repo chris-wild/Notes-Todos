@@ -1,0 +1,39 @@
+# HobPad recipe-conversion metering proxy. Deployed by scripts/ops-deploy.sh, never by an app build.
+# Secrets (wrangler secret put, per deployed name): ANTHROPIC_API_KEY, and APP_APPLE_ID once the
+# App Store Connect app record exists (needed to verify Production-environment purchases).
+name = "hobpad-ops"
+main = "src/index.js"
+# The newest date the pinned workerd (wrangler 4.133.0) accepts; the nodejs_compat flag is
+# explicit because the Apple app-store-server-library needs Node's crypto (X509Certificate)
+# for chain verification, and at this date the flag selects Node compat v2.
+compatibility_date = "2026-08-22"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[observability]
+enabled = true
+
+[[durable_objects.bindings]]
+name = "OPS"
+class_name = "OpsAccount"
+
+[[durable_objects.bindings]]
+name = "LIMITER"
+class_name = "Limiter"
+
+# SQLite-backed storage is the only kind the Workers Free plan allows (RiderNav ruling 2026-09-17).
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["OpsAccount", "Limiter"]
+
+[vars]
+BUNDLE_ID = "uk.co.promptbuilt.hobpad"
+# Sandbox stays allowed until App Store launch: App Review buys in sandbox, and Chris's
+# sideloaded Release builds produce Sandbox-environment purchases. Tighten at launch.
+ALLOWED_ENVIRONMENTS = "Production,Sandbox"
+# Server-authoritative credit map — the paywall's display copy must agree
+# (ios/HobPad/Store/PaywallSheet.swift).
+PRODUCT_CREDITS = '{"uk.co.promptbuilt.hobpad.ops50":50,"uk.co.promptbuilt.hobpad.ops100":100,"uk.co.promptbuilt.hobpad.ops500":500}'
+FREE_OPS = "5"
+MAX_PDF_BYTES = "10485760"
+TITLE_DAILY_LIMIT = "20"

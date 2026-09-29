@@ -9,14 +9,33 @@ struct SettingsSheet: View {
     @State private var exportDocument: BackupDocument?
     @State private var importOpen = false
     @State private var confirmImportData: Data?
+    @State private var paywallOpen = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
+                    HStack {
+                        Text("Credits remaining")
+                        Spacer()
+                        Text(model.ops.balance.map(String.init) ?? "—")
+                            .fontWeight(.semibold)
+                    }
+                    Text("One credit converts one recipe page into a shopping list. Naming photographed recipes is free.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Buy credits") { paywallOpen = true }
+                } header: {
+                    Text("Recipe conversions")
+                }
+
+                #if DEBUG
+                // Dev-only: a personal Anthropic key bypasses metering (BYO path). Released
+                // builds have no key UI — everyone meters through the Worker.
+                Section {
                     Text(model.hasKey
-                         ? "A key is stored in the Keychain on this device. It unlocks \"Create ingredient list\"."
-                         : "Add a key to unlock \"Create ingredient list\". It is stored in the Keychain and never backed up.")
+                         ? "A key is stored in the Keychain on this device. Extraction bypasses metering while it is present."
+                         : "Add a key to bypass metering in this dev build. It is stored in the Keychain and never backed up.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     TextField(model.hasKey ? "Replace key (sk-ant-…)" : "sk-ant-…", text: $keyDraft)
@@ -33,8 +52,9 @@ struct SettingsSheet: View {
                         }
                     }
                 } header: {
-                    Text("Anthropic API key")
+                    Text("Anthropic API key (dev build)")
                 }
+                #endif
 
                 Section {
                     Text("Export everything (including recipe PDFs) to a zip you can keep anywhere. Import replaces all current data. The zip format matches the Android app's backups.")
@@ -67,6 +87,10 @@ struct SettingsSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .sheet(isPresented: $paywallOpen) {
+                PaywallSheet(ops: model.ops)
+            }
+            .task { await model.ops.refreshBalance() }
             .overlay {
                 if let working = model.working {
                     VStack(spacing: 12) {

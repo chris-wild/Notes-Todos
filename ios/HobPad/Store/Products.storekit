@@ -1,0 +1,70 @@
+{
+  "identifier" : "F0A1B2C3-D4E5-4678-9ABC-DEF012345678",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "A1000050-0000-4000-8000-000000000050",
+      "localizations" : [
+        {
+          "description" : "50 recipe conversions",
+          "displayName" : "50 conversions",
+          "locale" : "en_GB"
+        }
+      ],
+      "productID" : "uk.co.promptbuilt.hobpad.ops50",
+      "referenceName" : "50 ops",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "2.99",
+      "familyShareable" : false,
+      "internalID" : "A1000100-0000-4000-8000-000000000100",
+      "localizations" : [
+        {
+          "description" : "100 recipe conversions",
+          "displayName" : "100 conversions",
+          "locale" : "en_GB"
+        }
+      ],
+      "productID" : "uk.co.promptbuilt.hobpad.ops100",
+      "referenceName" : "100 ops",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "A1000500-0000-4000-8000-000000000500",
+      "localizations" : [
+        {
+          "description" : "500 recipe conversions",
+          "displayName" : "500 conversions",
+          "locale" : "en_GB"
+        }
+      ],
+      "productID" : "uk.co.promptbuilt.hobpad.ops500",
+      "referenceName" : "500 ops",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "",
+    "_developerTeamID" : "U9RDY3V58L",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_GB",
+    "_storefront" : "GBR",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

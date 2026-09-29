@@ -2,6 +2,7 @@ package uk.co.promptbuilt.notestodos
 
 import android.app.Application
 import uk.co.promptbuilt.notestodos.ai.AnthropicClient
+import uk.co.promptbuilt.notestodos.ai.ByoOcrService
 import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
 import uk.co.promptbuilt.notestodos.backup.BackupManager
 import uk.co.promptbuilt.notestodos.backup.SafBackup
@@ -31,8 +32,9 @@ class NotesTodosApp : Application() {
     val recipeFiles by lazy { RecipeFiles(this) }
     val secureKeys by lazy { SecureKeys(AndroidSecretStore(this)) }
     val anthropicClient by lazy { AnthropicClient() }
+    // Android stays on the bring-your-own-key path (metered packs are iOS-only for now).
     val ingredientTodosUseCase by lazy {
-        IngredientTodosUseCase(recipesRepository, todosRepository, recipeFiles, anthropicClient, secureKeys)
+        IngredientTodosUseCase(recipesRepository, todosRepository, recipeFiles, ByoOcrService(anthropicClient, secureKeys))
     }
     val safBackup by lazy { SafBackup(this, BackupManager(database, recipeFiles)) }
 }

@@ -15,12 +15,16 @@ class AiUnauthorizedException(message: String) : Exception(message)
 
 /**
  * Direct port of the retired server's Anthropic Messages calls: same model,
- * prompts, prefill trick, and error mapping. This is the app's ONLY outbound
- * network dependency, riding the platform httpSend seam.
+ * prompts, prefill trick, and error mapping, riding the platform httpSend seam.
+ * This is the BYO-key path (Android + iOS Debug builds); the metered path is
+ * MeteredOcrClient + the Worker in backend/ops/src/index.js, which DUPLICATES the
+ * model and prompts below — change them together or the two paths will extract
+ * differently.
  */
 class AnthropicClient {
 
     /** Returns null on success, or a human-readable reason on failure. */
+    @Throws(Exception::class) // network failures must throw to Swift, not kill the app (SKIE)
     suspend fun validateKey(apiKey: String): String? {
         val reply = httpSend(
             method = "GET",

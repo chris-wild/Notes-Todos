@@ -20,8 +20,10 @@ class RecipesRepository(
 
     fun observeRecipes(): Flow<List<RecipeEntity>> = recipeDao.observeAll()
 
+    @Throws(Exception::class)
     suspend fun getById(id: Long): RecipeEntity? = recipeDao.getById(id)
 
+    @Throws(Exception::class)
     suspend fun create(name: String, notes: String): Long {
         val now = nowMillis()
         return recipeDao.insert(
@@ -29,6 +31,7 @@ class RecipesRepository(
         )
     }
 
+    @Throws(Exception::class)
     suspend fun update(id: Long, name: String, notes: String) {
         val recipe = recipeDao.getById(id) ?: return
         recipeDao.update(recipe.copy(name = name, notes = notes, updatedAt = nowMillis()))
@@ -36,10 +39,12 @@ class RecipesRepository(
 
     fun observeAttachments(): Flow<List<RecipeAttachmentEntity>> = attachmentDao.observeAll()
 
+    @Throws(Exception::class)
     suspend fun getAttachments(recipeId: Long): List<RecipeAttachmentEntity> =
         attachmentDao.getForRecipe(recipeId)
 
     /** Attachment FILE lifecycle (writing/deleting in the platform store) is the caller's. */
+    @Throws(Exception::class)
     suspend fun addAttachment(recipeId: Long, fileName: String, originalName: String?): Long {
         val position = attachmentDao.maxPosition(recipeId) + 1
         val id = attachmentDao.insert(
@@ -55,14 +60,18 @@ class RecipesRepository(
         return id
     }
 
+    @Throws(Exception::class)
     suspend fun removeAttachment(attachmentId: Long) = attachmentDao.delete(attachmentId)
 
+    @Throws(Exception::class)
     suspend fun delete(id: Long) = recipeDao.delete(id) // ingredients + attachments cascade
 
+    @Throws(Exception::class)
     suspend fun getIngredients(recipeId: Long): List<IngredientEntity> =
         ingredientDao.getForRecipe(recipeId)
 
     /** Replaces the cached extraction result for a recipe. */
+    @Throws(Exception::class)
     suspend fun replaceIngredients(recipeId: Long, ingredients: List<IngredientEntity>) {
         db.useWriterConnection { transactor ->
             transactor.immediateTransaction {
@@ -73,6 +82,7 @@ class RecipesRepository(
     }
 
     /** Stamps which todo category the ingredients were written to, and how many. */
+    @Throws(Exception::class)
     suspend fun setIngredientMetadata(recipeId: Long, todoCategory: String, count: Int) {
         val recipe = recipeDao.getById(recipeId) ?: return
         recipeDao.update(

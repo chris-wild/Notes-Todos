@@ -37,6 +37,9 @@ schemes:
         HobPad: all
     run:
       config: Debug
+      # Local StoreKit products for simulator testing (Xcode-signed transactions take the
+      # staging Worker's TEST_MODE path; real signatures come from sandbox on a device).
+      storeKitConfiguration: HobPad/Store/Products.storekit
     archive:
       config: Release
 

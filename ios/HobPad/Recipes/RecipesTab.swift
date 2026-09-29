@@ -15,7 +15,7 @@ struct RecipesTab: View {
             }
         }
         .onAppear {
-            if model == nil { model = RecipesModel(core: services.core) }
+            if model == nil { model = RecipesModel(core: services.core, ops: services.ops) }
         }
     }
 }
@@ -171,6 +171,9 @@ private struct RecipeViewerSheet: View {
         var path: String { id }
     }
 
+    @State private var confirmCost: Int?
+    @State private var paywallOpen = false
+
     var body: some View {
         let attachments = model.attachments(for: recipe)
         NavigationStack {
@@ -207,13 +210,46 @@ private struct RecipeViewerSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
                 }
-                if model.hasKey {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button("Create ingredient list") {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create ingredient list") {
+                        if model.usesByoKey {
+                            // Dev builds on a personal key: no credits involved.
                             model.createIngredients(for: recipe) { dismiss() }
+                        } else {
+                            let cost = model.opsCost(for: recipe)
+                            if (model.ops.balance ?? 0) < cost {
+                                paywallOpen = true
+                            } else {
+                                confirmCost = cost
+                            }
                         }
-                        .disabled(model.working != nil)
                     }
+                    .disabled(model.working != nil)
+                }
+            }
+            .confirmationDialog(
+                "Convert this recipe?",
+                isPresented: Binding(get: { confirmCost != nil }, set: { if !$0 { confirmCost = nil } }),
+                titleVisibility: .visible,
+            ) {
+                Button("Convert") {
+                    confirmCost = nil
+                    model.createIngredients(for: recipe) { dismiss() }
+                }
+            } message: {
+                let cost = confirmCost ?? 1
+                let balance = model.ops.balance ?? 0
+                Text("This uses \(cost) of your \(balance) conversion credit\(balance == 1 ? "" : "s").")
+            }
+            .sheet(isPresented: $paywallOpen) {
+                PaywallSheet(ops: model.ops)
+            }
+            .onChange(of: model.paywallNeeded) {
+                // The server's page count disagreed with the preview and the balance fell
+                // short mid-run — offer packs right away.
+                if model.paywallNeeded {
+                    model.paywallNeeded = false
+                    paywallOpen = true
                 }
             }
             .fullScreenCover(item: $fullScreenPath) { item in

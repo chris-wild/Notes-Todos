@@ -1,0 +1,19 @@
+{
+  "name": "hobpad-ops",
+  "private": true,
+  "version": "1.0.0",
+  "description": "HobPad recipe-conversion metering: a Cloudflare Worker with one Durable Object per ops account, verifying App Store purchases offline.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "wrangler dev"
+  },
+  "dependencies": {
+    "@apple/app-store-server-library": "1.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "0.22.0",
+    "vitest": "4.1.11",
+    "wrangler": "4.133.0"
+  }
+}

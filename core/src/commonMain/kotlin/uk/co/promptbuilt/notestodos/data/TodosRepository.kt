@@ -25,6 +25,7 @@ class TodosRepository(
             CategoryRules.union(stored.map { it.name }, inUse)
         }
 
+    @Throws(Exception::class)
     suspend fun addTodo(text: String, category: String): Long? {
         val trimmed = text.trim()
         if (trimmed.isEmpty()) return null
@@ -33,15 +34,20 @@ class TodosRepository(
         )
     }
 
+    @Throws(Exception::class)
     suspend fun setCompleted(id: Long, completed: Boolean) = todoDao.setCompleted(id, completed)
 
+    @Throws(Exception::class)
     suspend fun deleteTodo(id: Long) = todoDao.delete(id)
 
+    @Throws(Exception::class)
     suspend fun countInCategory(category: String): Int = todoDao.countByCategory(category)
 
+    @Throws(Exception::class)
     suspend fun deleteAllInCategory(category: String) = todoDao.deleteByCategory(category)
 
     /** Returns false when the name is empty or already exists (incl. defaults). */
+    @Throws(Exception::class)
     suspend fun addCategory(name: String): Boolean {
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return false
@@ -62,6 +68,7 @@ class TodosRepository(
      * Deletes a non-default category; its todos move to General
      * (matches DELETE /api/todo-categories, backend/server.js:621).
      */
+    @Throws(Exception::class)
     suspend fun deleteCategory(name: String): Boolean {
         if (CategoryRules.isDefault(name)) return false
         db.useWriterConnection { transactor ->

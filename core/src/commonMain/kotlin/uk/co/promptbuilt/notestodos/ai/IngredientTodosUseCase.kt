@@ -3,28 +3,30 @@ package uk.co.promptbuilt.notestodos.ai
 import uk.co.promptbuilt.notestodos.data.RecipeStore
 import uk.co.promptbuilt.notestodos.data.RecipesRepository
 import uk.co.promptbuilt.notestodos.data.nowMillis
-import uk.co.promptbuilt.notestodos.data.SecureKeys
 import uk.co.promptbuilt.notestodos.data.TodosRepository
 import uk.co.promptbuilt.notestodos.data.db.IngredientEntity
 
 /**
  * Port of POST /api/recipes/:id/create-ingredient-todos (backend/server.js:1073-1170):
  * cached ingredients short-circuit the API call; extraction results are cached;
- * todos land in a category named after the recipe.
+ * todos land in a category named after the recipe. Whether extraction rides the user's
+ * own key or the metered proxy is the injected OcrService's business — a cached rerun
+ * costs nothing and needs neither.
  */
 class IngredientTodosUseCase(
     private val recipes: RecipesRepository,
     private val todos: TodosRepository,
     private val recipeStore: RecipeStore,
-    private val client: AnthropicClient,
-    private val secureKeys: SecureKeys,
+    private val ocr: OcrService,
 ) {
 
     data class Outcome(val category: String, val count: Int, val alreadyCreated: Boolean)
 
+    // @Throws matters: without it, SKIE's async bridge treats a Kotlin exception as an
+    // UNHANDLED coroutine failure and terminates the iOS app instead of throwing to Swift
+    // (diagnosed in the simulator, Sept 2026 — a 502 from the metering Worker killed the app).
+    @Throws(Exception::class)
     suspend fun run(recipeId: Long): Outcome {
-        val apiKey = secureKeys.getAnthropicKey()
-            ?: throw IllegalStateException("No Anthropic API key configured. Add one in Settings.")
         val recipe = recipes.getById(recipeId)
             ?: throw IllegalStateException("Recipe not found")
 
@@ -43,14 +45,14 @@ class IngredientTodosUseCase(
                 attachments.flatMap { attachment ->
                     val bytes = recipeStore.read(attachment.fileName)
                         ?: throw IllegalStateException("PDF not found: ${attachment.originalName ?: attachment.fileName}")
-                    client.extractIngredientsFromPdf(bytes, recipe.name, apiKey)
+                    ocr.extractIngredientsFromPdf(bytes, recipe.name)
                 }
             } else {
                 val text = recipe.notes.trim()
                 if (text.isEmpty()) {
                     throw IllegalStateException("Recipe has no PDF and no notes to extract ingredients from")
                 }
-                client.extractIngredientsFromText(text, recipe.name, apiKey)
+                ocr.extractIngredientsFromText(text, recipe.name)
             }
             if (extracted.isNotEmpty()) {
                 val now = nowMillis()
