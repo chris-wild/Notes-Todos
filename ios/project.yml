@@ -67,10 +67,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        # Expose the app's Documents folder in the Files app: users can see
-        # exported backups and drop zips there to import.
-        UIFileSharingEnabled: true
-        LSSupportsOpeningDocumentsInPlace: true
+        # Documents is NOT exposed in the Files app any more (Sept 30): it only ever
+        # existed to hand backup zips around, backup is dev-only now, and the folder
+        # holds the raw SQLite database — nothing a user should touch.
         # Standard HTTPS only: answers the export-compliance question up front so
         # TestFlight builds are testable the moment Apple finishes processing.
         ITSAppUsesNonExemptEncryption: false

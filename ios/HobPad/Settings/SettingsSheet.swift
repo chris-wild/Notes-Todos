@@ -56,6 +56,11 @@ struct SettingsSheet: View {
                 }
                 #endif
 
+                #if DEBUG
+                // Dev-only since Sept 30: released iOS relies on iCloud device backup,
+                // which covers everything (DB in Documents, PDFs + settings in Application
+                // Support, nothing excluded — audited). The zip tooling stays for dev data
+                // wrangling and Android compatibility.
                 Section {
                     Text("Export everything (including recipe PDFs) to a zip you can keep anywhere. Import replaces all current data. The zip format matches the Android app's backups.")
                         .font(.footnote)
@@ -69,8 +74,9 @@ struct SettingsSheet: View {
                     }
                     Button("Import backup") { importOpen = true }
                 } header: {
-                    Text("Backup")
+                    Text("Backup (dev build)")
                 }
+                #endif
 
                 if let message = model.message {
                     Section {
