@@ -28,6 +28,7 @@ private struct TodosContent: View {
     @State private var categoryError: String?
     @State private var confirmDeleteCategory = false
     @State private var confirmDeleteAll = false
+    @FocusState private var addFieldFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -81,8 +82,20 @@ private struct TodosContent: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollDismissesKeyboard(.immediately)
             }
             .navigationTitle("Todos")
+            .toolbar {
+                // The way OUT of the keyboard: without this, focusing the add field left
+                // no dismissal route at all — the keyboard sat over the tab bar until the
+                // app was killed (Chris, Sept 30).
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { addFieldFocused = false }
+                }
+            }
+            // Changing category is "I'm done typing here" too.
+            .onChange(of: model.activeCategory) { addFieldFocused = false }
             .confirmationDialog(
                 model.visibleTodos.count == 1
                     ? "Delete the only todo?"
@@ -189,6 +202,7 @@ private struct TodosContent: View {
                 Image(systemName: "pencil")
                     .foregroundStyle(.secondary)
                 TextField("Add to \(model.activeCategory)…", text: $newTodo)
+                    .focused($addFieldFocused)
                     .onSubmit(submit)
             }
             .padding(.horizontal, 14)
