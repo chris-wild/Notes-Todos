@@ -175,13 +175,19 @@ private struct TodosContent: View {
 
     private var addRow: some View {
         HStack {
-            // Filled capsule like the search bar above it: unmistakably a place to type
-            // (the bare rounded border read as decoration on iOS 26 — Chris, Sept 30).
-            TextField("Add to \(model.activeCategory)…", text: $newTodo)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color(.secondarySystemBackground), in: Capsule())
-                .onSubmit(submit)
+            // Unmistakably a place to type, in BOTH color schemes: a leading pencil (the
+            // search bar's magnifier trick), a fill, AND a stroke — fill alone all but
+            // vanished against dark mode's black (Chris, Sept 30).
+            HStack(spacing: 8) {
+                Image(systemName: "pencil")
+                    .foregroundStyle(.secondary)
+                TextField("Add to \(model.activeCategory)…", text: $newTodo)
+                    .onSubmit(submit)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(Color(.secondarySystemBackground), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color(.systemGray3), lineWidth: 1))
             Button("Add", action: submit)
                 .buttonStyle(.borderedProminent)
                 .disabled(newTodo.trimmingCharacters(in: .whitespaces).isEmpty)
