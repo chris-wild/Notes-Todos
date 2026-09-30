@@ -73,7 +73,13 @@ struct PaywallSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
-            .task { await ops.refreshBalance() }
+            .task {
+                await ops.refreshBalance()
+                // A launch-time load can race the network or Apple's product servers
+                // (an empty SUCCESS during store propagation); opening the paywall is
+                // the moment a stale empty list actually matters, so try again.
+                if ops.products.isEmpty { await ops.loadProducts() }
+            }
         }
     }
 }
