@@ -56,12 +56,19 @@ final class TodosModel {
         Task { try? await core.todosRepository.deleteTodo(id: todo.id) }
     }
 
-    /// Bulk deletion for multi-select: ids are resolved against the CURRENT list first,
-    /// so a stale selection (e.g. a todo deleted elsewhere mid-edit) is simply skipped.
-    func delete(ids: Set<Int64>) {
+    /// Bulk deletion for Delete All: ids are resolved against the CURRENT list first, so a
+    /// stale id (a todo deleted elsewhere meanwhile) is simply skipped. With
+    /// [removeCategory], the now-empty non-default category goes too — strictly AFTER its
+    /// todos in the same task, because deleting a category moves any survivors to General.
+    func delete(ids: Set<Int64>, removeCategory: Bool = false) {
         let targets = allTodos.filter { ids.contains($0.id) }
+        let category = activeCategory
+        if removeCategory { activeCategory = "General" }
         Task {
             for todo in targets { try? await core.todosRepository.deleteTodo(id: todo.id) }
+            if removeCategory {
+                try? await core.todosRepository.deleteCategory(name: category)
+            }
         }
     }
 

@@ -91,10 +91,17 @@ private struct TodosContent: View {
                 titleVisibility: .visible,
             ) {
                 Button("Delete All", role: .destructive) {
-                    model.delete(ids: Set(model.visibleTodos.map { $0.id }))
+                    // Emptying a non-default category removes the category too — but only
+                    // when the WHOLE category is going (a search subset leaves survivors).
+                    model.delete(
+                        ids: Set(model.visibleTodos.map { $0.id }),
+                        removeCategory: !model.activeIsDefault && model.query.isEmpty,
+                    )
                 }
             } message: {
-                Text("Everything in \"\(model.activeCategory)\" will be deleted.")
+                Text(!model.activeIsDefault && model.query.isEmpty
+                     ? "Everything in \"\(model.activeCategory)\" will be deleted, and the empty category removed."
+                     : "Everything in \"\(model.activeCategory)\" will be deleted.")
             }
             .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
