@@ -30,10 +30,8 @@ private struct TodosContent: View {
     @State private var selection = Set<Int64>()
     @State private var confirmBulkDelete = false
 
-    /// What the bulk button acts on: the selection, or the whole visible list when
-    /// nothing is ticked ("Delete All").
-    private var bulkTargets: Set<Int64> {
-        selection.isEmpty ? Set(model.visibleTodos.map { $0.id }) : selection
+    private var allSelected: Bool {
+        !model.visibleTodos.isEmpty && selection.count == model.visibleTodos.count
     }
 
     var body: some View {
@@ -41,6 +39,19 @@ private struct TodosContent: View {
             VStack(spacing: 0) {
                 categoryStrip
                 addRow
+                if !model.visibleTodos.isEmpty {
+                    // Selection entry point sits ON the list it acts on — a nav-bar Edit
+                    // button floated ambiguously above the category strip (Chris, Sept 30).
+                    HStack {
+                        Spacer()
+                        Button(editMode.isEditing ? "Done" : "Select") {
+                            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
+                        }
+                        .font(.subheadline)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 4)
+                }
                 List(selection: $selection) {
                     if model.visibleTodos.isEmpty {
                         Text(model.query.isEmpty
@@ -78,21 +89,19 @@ private struct TodosContent: View {
                     // The bulk action bar lives IN the layout, not in a .bottomBar toolbar:
                     // iOS 26's floating tab bar renders OVER toolbar bottom bars (reported
                     // from Chris's phone, reproduced on the iOS 26.5 simulator).
+                    // One delete button, appearing only once something is ticked:
+                    // "Delete Selected (n)" for a partial selection, "Delete All" for all.
                     HStack {
-                        Button(selection.count == model.visibleTodos.count && !selection.isEmpty
-                               ? "Deselect All" : "Select All") {
-                            if selection.count == model.visibleTodos.count {
-                                selection.removeAll()
-                            } else {
-                                selection = Set(model.visibleTodos.map { $0.id })
-                            }
+                        Button(allSelected ? "Deselect All" : "Select All") {
+                            selection = allSelected ? [] : Set(model.visibleTodos.map { $0.id })
                         }
                         Spacer()
-                        Button(selection.isEmpty ? "Delete All" : "Delete Selected (\(selection.count))",
-                               role: .destructive) {
-                            confirmBulkDelete = true
+                        if !selection.isEmpty {
+                            Button(allSelected ? "Delete All" : "Delete Selected (\(selection.count))",
+                                   role: .destructive) {
+                                confirmBulkDelete = true
+                            }
                         }
-                        .disabled(model.visibleTodos.isEmpty)
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 12)
@@ -100,20 +109,21 @@ private struct TodosContent: View {
                 }
             }
             .navigationTitle("Todos")
-            .toolbar {
-                // Standard list editing: the visible route to deletion (swipe still works).
-                ToolbarItem(placement: .topBarTrailing) { EditButton() }
-            }
             .environment(\.editMode, $editMode)
             .onChange(of: editMode.isEditing) { if !editMode.isEditing { selection.removeAll() } }
-            .onChange(of: model.activeCategory) { selection.removeAll() }
+            // Switching category leaves selection mode entirely — a lingering action bar
+            // over another (possibly empty) list reads as broken.
+            .onChange(of: model.activeCategory) {
+                selection.removeAll()
+                editMode = .inactive
+            }
             .confirmationDialog(
-                "Delete \(bulkTargets.count) todo\(bulkTargets.count == 1 ? "" : "s")?",
+                "Delete \(selection.count) todo\(selection.count == 1 ? "" : "s")?",
                 isPresented: $confirmBulkDelete,
                 titleVisibility: .visible,
             ) {
                 Button("Delete", role: .destructive) {
-                    model.delete(ids: bulkTargets)
+                    model.delete(ids: selection)
                     selection.removeAll()
                     editMode = .inactive
                 }
