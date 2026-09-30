@@ -1,0 +1,100 @@
+/* HobPad site stylesheet, v1. Versioned filename: never edit in place, bump to v2
+   (non-HTML ships with max-age 86400 — see deploy/deploy.sh).
+   Discipline follows the Roadbook rules from routehold.com: three typefaces, three
+   radii, no gradients, no pills, accent used sparingly, prose never centred. */
+
+:root {
+  --paper: #F7F3EA;
+  --ink: #22201B;
+  --muted: #6E6759;
+  --hairline: #D9D2C2;
+  --accent: #4F6B2E;      /* herb green; at most twice per viewport */
+  --warn: #A8322A;
+  --good: #2E6B4F;
+  --display: "Libre Franklin", sans-serif;
+  --serif: "Source Serif 4", serif;
+  --mono: "IBM Plex Mono", monospace;
+  --r-flat: 0;
+  --r-control: 2px;
+  --r-panel: 3px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+.band { padding: 56px 0; }
+.band + .band { border-top: 1px solid var(--hairline); }
+
+h1, h2, h3 { font-family: var(--display); font-weight: 800; line-height: 1.15; }
+h1 { font-size: clamp(34px, 6vw, 54px); letter-spacing: -0.015em; }
+h2 { font-size: 26px; margin-bottom: 14px; }
+h3 { font-size: 19px; margin: 22px 0 6px; }
+
+.label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lead { font-size: 20px; }
+.small { font-size: 14.5px; }
+.muted { color: var(--muted); }
+.prose p + p { margin-top: 14px; }
+.prose ul { margin: 12px 0 12px 22px; }
+.prose li + li { margin-top: 6px; }
+a { color: var(--ink); text-decoration-color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: var(--accent); }
+
+.nav { display: flex; align-items: baseline; justify-content: space-between; padding: 22px 0; }
+.nav__brand { font-family: var(--display); font-weight: 800; font-size: 20px; text-decoration: none; }
+.nav__links { display: flex; gap: 22px; font-family: var(--mono); font-size: 13.5px; }
+.nav__links a { text-decoration: none; }
+
+.hero__art {
+  width: 116px; height: 116px; border-radius: var(--r-panel);
+  border: 1px solid var(--hairline); display: block; margin-bottom: 26px;
+}
+.hero h1 { max-width: 15ch; }
+.hero .lead { max-width: 52ch; margin-top: 18px; }
+
+.steps { list-style: none; margin-top: 8px; }
+.steps li { display: flex; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--hairline); }
+.steps li:last-child { border-bottom: 0; }
+.steps .label { padding-top: 5px; white-space: nowrap; }
+
+.btn {
+  display: inline-block; font-family: var(--mono); font-size: 14px;
+  padding: 12px 20px; border: 1px solid var(--ink); border-radius: var(--r-control);
+  background: var(--ink); color: var(--paper); text-decoration: none; cursor: pointer;
+}
+.btn:hover { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+.btn--ghost { background: transparent; color: var(--ink); }
+.btn--ghost:hover { background: transparent; color: var(--accent); border-color: var(--accent); }
+
+form .field { margin-top: 16px; }
+form label { display: block; font-family: var(--mono); font-size: 13px; margin-bottom: 6px; }
+input[type="email"], input[type="text"], textarea {
+  width: 100%; font-family: var(--serif); font-size: 16px; color: var(--ink);
+  background: #FFFDF7; border: 1px solid var(--hairline); border-radius: var(--r-control);
+  padding: 10px 12px;
+}
+input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+textarea { min-height: 140px; resize: vertical; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+.foot { border-top: 1px solid var(--hairline); margin-top: 26px; }
+.foot__row {
+  display: flex; flex-wrap: wrap; gap: 18px; justify-content: space-between;
+  padding: 26px 0 40px; font-family: var(--mono); font-size: 13px; color: var(--muted);
+}
+.foot__row a { text-decoration: none; }
