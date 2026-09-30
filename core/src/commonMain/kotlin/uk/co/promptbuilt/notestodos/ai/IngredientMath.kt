@@ -16,8 +16,16 @@ object IngredientMath {
 
     private val AMOUNT = Regex("""^(\d[\d\s./]*?)\s*([a-zA-Z]*)$""")
 
-    /** "— Lasagne —" section headings from multi-recipe extractions never merge or scale. */
-    private fun isHeading(line: IngredientLine) = line.quantity == null && line.name.startsWith("—")
+    /**
+     * List furniture, never a purchasable item: "— Lasagne —" headings written by older
+     * parses (they reached shopping lists as bogus todos — Chris's Hollandaise report),
+     * and fully parenthesised titles like "(Eggs Benedict)" some extractions emit.
+     */
+    fun isHeading(line: IngredientLine): Boolean {
+        if (line.quantity != null) return false
+        val name = line.name.trim()
+        return name.startsWith("—") || (name.startsWith("(") && name.endsWith(")"))
+    }
 
     /** ("1 1/2", "tsp") from "1 1/2 tsp"; null when the quantity is missing or not numeric. */
     internal fun parseAmount(quantity: String?): Pair<Double, String>? {

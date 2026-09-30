@@ -186,14 +186,14 @@ final class RecipesModel {
         }
     }
 
-    func createIngredients(for recipe: RecipeEntity, multiplier: Int = 1, onSuccess: @escaping () -> Void) {
+    func createIngredients(for recipe: RecipeEntity, multiplier: Int = 1, onSuccess: @escaping (String) -> Void) {
         working = "Extracting ingredients…"
         Task {
             defer { working = nil }
             do {
                 let outcome = try await core.ingredientTodosUseCase.run(recipeId: recipe.id, multiplier: Int32(multiplier))
                 message = "Added \(outcome.count) ingredients to \"\(outcome.category)\""
-                onSuccess()
+                onSuccess(outcome.category)
             } catch {
                 message = error.localizedDescription
                 // The Worker's 402 crosses the Kotlin bridge as this message prefix

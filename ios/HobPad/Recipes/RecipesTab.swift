@@ -181,6 +181,7 @@ private struct RecipesContent: View {
 
 private struct RecipeViewerSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppServices.self) private var services
     @Bindable var model: RecipesModel
     let recipe: RecipeEntity
     let onEdit: () -> Void
@@ -192,22 +193,19 @@ private struct RecipeViewerSheet: View {
         var path: String { id }
     }
 
-    @State private var confirmCost: Int?
+    /// Presented when conversion is a go: carries the credit cost (nil = free run).
+    private struct ConvertContext: Identifiable {
+        let cost: Int?
+        var id: Int { cost ?? -1 }
+    }
+
+    @State private var convertContext: ConvertContext?
     @State private var paywallOpen = false
-    @State private var multiplier = 1
 
     var body: some View {
         let attachments = model.attachments(for: recipe)
         NavigationStack {
             VStack(alignment: .leading, spacing: 8) {
-                // Scales the shopping list (cooking for more): quantities are multiplied
-                // when the ingredient list is created. Cached recipes re-run free at any ×.
-                Stepper(value: $multiplier, in: 1...10) {
-                    Text(multiplier == 1 ? "Quantities ×1" : "Quantities ×\(multiplier)")
-                        .font(.subheadline)
-                        .fontWeight(multiplier == 1 ? .regular : .semibold)
-                }
-                .padding(.horizontal)
                 if !recipe.notes.isEmpty {
                     ScrollView {
                         Text(recipe.notes)
@@ -233,6 +231,28 @@ private struct RecipeViewerSheet: View {
                     .tabViewStyle(.page)
                     .indexViewStyle(.page(backgroundDisplayMode: .always))
                 }
+                // THE action of this screen, so it is a full-width button in the layout —
+                // iOS 26 collapses trailing toolbar items into the ⋯ overflow, which is
+                // where it was hiding (Chris, Sept 30).
+                Button {
+                    Task {
+                        switch await model.conversionGate(for: recipe) {
+                        case .run:
+                            convertContext = ConvertContext(cost: nil)
+                        case .confirm(let cost):
+                            convertContext = ConvertContext(cost: cost)
+                        case .paywall:
+                            paywallOpen = true
+                        }
+                    }
+                } label: {
+                    Text("Create ingredient list")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.working != nil)
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
             .navigationTitle(recipe.name)
             .navigationBarTitleDisplayMode(.inline)
@@ -252,35 +272,15 @@ private struct RecipeViewerSheet: View {
                         Image(systemName: "ellipsis.circle").accessibilityLabel("Recipe actions")
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create ingredient list") {
-                        Task {
-                            switch await model.conversionGate(for: recipe) {
-                            case .run:
-                                model.createIngredients(for: recipe, multiplier: multiplier) { dismiss() }
-                            case .confirm(let cost):
-                                confirmCost = cost
-                            case .paywall:
-                                paywallOpen = true
-                            }
-                        }
-                    }
-                    .disabled(model.working != nil)
-                }
             }
-            .confirmationDialog(
-                "Convert this recipe?",
-                isPresented: Binding(get: { confirmCost != nil }, set: { if !$0 { confirmCost = nil } }),
-                titleVisibility: .visible,
-            ) {
-                Button("Convert") {
-                    confirmCost = nil
-                    model.createIngredients(for: recipe, multiplier: multiplier) { dismiss() }
+            .sheet(item: $convertContext) { context in
+                ConvertSheet(model: model, recipe: recipe, cost: context.cost) { category in
+                    // Straight to the list that was just created.
+                    convertContext = nil
+                    dismiss()
+                    services.pendingTodoCategory = category
+                    services.selectedTab = .todos
                 }
-            } message: {
-                let cost = confirmCost ?? 1
-                let balance = model.ops.balance ?? 0
-                Text("This uses \(cost) of your \(balance) conversion credit\(balance == 1 ? "" : "s").")
             }
             .sheet(isPresented: $paywallOpen) {
                 PaywallSheet(ops: model.ops)
@@ -332,6 +332,71 @@ private struct RecipeViewerSheet: View {
                 }
                 .padding(12)
             }
+    }
+}
+
+/// The conversion dialog: quantities live here now (not floating on the viewer), alongside
+/// the credit cost when the run will spend any, and the one button that does it.
+private struct ConvertSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Bindable var model: RecipesModel
+    let recipe: RecipeEntity
+    let cost: Int?
+    let onDone: (String) -> Void
+    @State private var multiplier = 1
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper(value: $multiplier, in: 1...10) {
+                        Text("Quantities ×\(multiplier)")
+                            .fontWeight(multiplier == 1 ? .regular : .semibold)
+                    }
+                    Text("Multiplies every ingredient — ×3 triples the shopping list.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Cooking for more?")
+                }
+
+                Section {
+                    Button {
+                        model.createIngredients(for: recipe, multiplier: multiplier) { category in
+                            onDone(category)
+                        }
+                    } label: {
+                        Text("Create ingredient list")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(model.working != nil)
+                } footer: {
+                    if let cost {
+                        Text("Uses \(cost) of your \(model.ops.balance ?? 0) conversion credit\((model.ops.balance ?? 0) == 1 ? "" : "s").")
+                    } else {
+                        Text("This recipe converts free — its ingredients are already known.")
+                    }
+                }
+            }
+            .navigationTitle("Ingredient list")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .overlay {
+                if let working = model.working {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text(working)
+                    }
+                    .padding(24)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

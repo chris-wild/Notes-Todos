@@ -20,6 +20,7 @@ struct TodosTab: View {
 }
 
 private struct TodosContent: View {
+    @Environment(AppServices.self) private var services
     @Bindable var model: TodosModel
     @State private var newTodo = ""
     @State private var addingCategory = false
@@ -98,12 +99,22 @@ private struct TodosContent: View {
             .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
             .task { await model.observeCategories() }
+            // A freshly created ingredient list routes here with its category preselected.
+            .onAppear { consumePendingCategory() }
+            .onChange(of: services.pendingTodoCategory) { consumePendingCategory() }
             .alert("Delete category?", isPresented: $confirmDeleteCategory) {
                 Button("Cancel", role: .cancel) {}
                 Button("OK", role: .destructive) { model.deleteActiveCategory() }
             } message: {
                 Text("Todos in \"\(model.activeCategory)\" will be moved to General.")
             }
+        }
+    }
+
+    private func consumePendingCategory() {
+        if let category = services.pendingTodoCategory {
+            model.activeCategory = category
+            services.pendingTodoCategory = nil
         }
     }
 

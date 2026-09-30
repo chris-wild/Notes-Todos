@@ -14,7 +14,9 @@ class IngredientParsingTest {
     }
 
     @Test
-    fun parsesMultiRecipeShapeWithHeadings() {
+    fun flattensMultiRecipeShapeWithoutHeadings() {
+        // Section names never reach the shopping list — "— Hollandaise sauce —" is not
+        // something anyone buys (Chris's bug report, Sept 30).
         val out = IngredientParsing.parseResponse(
             """{"recipes": [
                 {"name": "Pancakes", "ingredients": ["100g flour", "1 egg"]},
@@ -23,7 +25,7 @@ class IngredientParsingTest {
             ]}""",
         )
         assertEquals(
-            listOf("— Pancakes —", "100g flour", "1 egg", "— Syrup —", "50ml maple syrup"),
+            listOf("100g flour", "1 egg", "50ml maple syrup"),
             out,
         )
     }

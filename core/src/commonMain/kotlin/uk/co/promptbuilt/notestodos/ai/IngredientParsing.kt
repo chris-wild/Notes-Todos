@@ -28,7 +28,9 @@ object IngredientParsing {
     /**
      * Parses the model output (with the "{" prefill already restored by the caller).
      * Accepts {"ingredients": [...]} or the multi-recipe shape, which is flattened
-     * with "— name —" headings so the todo list stays readable.
+     * WITHOUT section headings: a shopping list wants "9 garlic cloves", not
+     * "— Hollandaise sauce —" as a purchasable item (Chris's bug report, Sept 30) —
+     * amalgamation merges duplicates across the sections instead.
      */
     fun parseResponse(outText: String): List<String> {
         val parsed = tryParse(outText)
@@ -45,13 +47,10 @@ object IngredientParsing {
             val out = mutableListOf<String>()
             for (element in array) {
                 val recipe = element as? JsonObject ?: continue
-                val name = (recipe["name"] as? JsonPrimitive)?.content?.trim().orEmpty()
                 val ingredients = (recipe["ingredients"] as? JsonArray)
                     ?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content?.trim() }
                     ?.filter { it.isNotEmpty() }
                     .orEmpty()
-                if (name.isEmpty() && ingredients.isEmpty()) continue
-                if (name.isNotEmpty()) out.add("— $name —")
                 out.addAll(ingredients)
             }
             return out.take(400)

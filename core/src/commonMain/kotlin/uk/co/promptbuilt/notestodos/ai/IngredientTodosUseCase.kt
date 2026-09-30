@@ -36,10 +36,11 @@ class IngredientTodosUseCase(
         val hasCached = cached.isNotEmpty()
 
         val lines: List<IngredientLine> = if (hasCached) {
-            // Amalgamate cached rows too: caches written before merging existed stay usable.
+            // Amalgamate cached rows too, and drop the "— section —" headings older
+            // parses cached: caches written before either change existed stay usable.
             IngredientMath.amalgamate(
                 cached.map { row -> IngredientLine(row.name, row.quantity?.takeIf { it.isNotBlank() }) },
-            )
+            ).filterNot { IngredientMath.isHeading(it) }
         } else {
             val attachments = recipes.getAttachments(recipeId)
             val extracted = if (attachments.isNotEmpty()) {
@@ -63,7 +64,7 @@ class IngredientTodosUseCase(
                     val (name, quantity) = IngredientParsing.splitQuantity(ing)
                     IngredientLine(name, quantity)
                 },
-            )
+            ).filterNot { IngredientMath.isHeading(it) }
             if (merged.isNotEmpty()) {
                 val now = nowMillis()
                 recipes.replaceIngredients(

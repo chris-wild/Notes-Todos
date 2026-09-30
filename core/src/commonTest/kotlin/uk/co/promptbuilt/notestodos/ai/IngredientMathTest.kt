@@ -70,4 +70,12 @@ class IngredientMathTest {
         val lines = listOf(split("3 eggs"))
         assertEquals(lines, IngredientMath.scale(lines, 1))
     }
+
+    @Test
+    fun headings_and_parenthesised_titles_are_recognised_as_furniture() {
+        assertEquals(true, IngredientMath.isHeading(IngredientLine("— Hollandaise sauce —", null)))
+        assertEquals(true, IngredientMath.isHeading(IngredientLine("(Eggs Benedict)", null)))
+        assertEquals(false, IngredientMath.isHeading(IngredientLine("eggs", null)))
+        assertEquals(false, IngredientMath.isHeading(IngredientLine("eggs (large)", null)))
+    }
 }
