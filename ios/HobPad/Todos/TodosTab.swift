@@ -26,13 +26,7 @@ private struct TodosContent: View {
     @State private var categoryDraft = ""
     @State private var categoryError: String?
     @State private var confirmDeleteCategory = false
-    @State private var editMode: EditMode = .inactive
-    @State private var selection = Set<Int64>()
-    @State private var confirmBulkDelete = false
-
-    private var allSelected: Bool {
-        !model.visibleTodos.isEmpty && selection.count == model.visibleTodos.count
-    }
+    @State private var confirmDeleteAll = false
 
     var body: some View {
         NavigationStack {
@@ -40,19 +34,18 @@ private struct TodosContent: View {
                 categoryStrip
                 addRow
                 if !model.visibleTodos.isEmpty {
-                    // Selection entry point sits ON the list it acts on — a nav-bar Edit
-                    // button floated ambiguously above the category strip (Chris, Sept 30).
+                    // Bulk deletion is one visible button on the list it empties;
+                    // per-item deletion is the bin on each row (the Android pattern,
+                    // adopted here after two rounds of selection-mode clunk — Chris, Sept 30).
                     HStack {
                         Spacer()
-                        Button(editMode.isEditing ? "Done" : "Select") {
-                            withAnimation { editMode = editMode.isEditing ? .inactive : .active }
-                        }
-                        .font(.subheadline)
+                        Button("Delete All", role: .destructive) { confirmDeleteAll = true }
+                            .font(.subheadline)
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 4)
                 }
-                List(selection: $selection) {
+                List {
                     if model.visibleTodos.isEmpty {
                         Text(model.query.isEmpty
                              ? "Nothing in \(model.activeCategory) yet — add one above."
@@ -72,63 +65,35 @@ private struct TodosContent: View {
                                 .strikethrough(todo.completed)
                                 .foregroundStyle(todo.completed ? .secondary : .primary)
                             Spacer()
+                            Button {
+                                model.delete(todo)
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
+                                    .accessibilityLabel("Delete \(todo.text)")
+                            }
+                            .buttonStyle(.plain)
                         }
                         .swipeActions {
                             Button("Delete", role: .destructive) { model.delete(todo) }
                         }
-                        .contextMenu {
-                            Button("Delete", role: .destructive) { model.delete(todo) }
-                        }
-                    }
-                    .onDelete { offsets in
-                        for todo in offsets.map({ model.visibleTodos[$0] }) { model.delete(todo) }
                     }
                 }
                 .listStyle(.plain)
-                if editMode.isEditing {
-                    // The bulk action bar lives IN the layout, not in a .bottomBar toolbar:
-                    // iOS 26's floating tab bar renders OVER toolbar bottom bars (reported
-                    // from Chris's phone, reproduced on the iOS 26.5 simulator).
-                    // One delete button, appearing only once something is ticked:
-                    // "Delete Selected (n)" for a partial selection, "Delete All" for all.
-                    HStack {
-                        Button(allSelected ? "Deselect All" : "Select All") {
-                            selection = allSelected ? [] : Set(model.visibleTodos.map { $0.id })
-                        }
-                        Spacer()
-                        if !selection.isEmpty {
-                            Button(allSelected ? "Delete All" : "Delete Selected (\(selection.count))",
-                                   role: .destructive) {
-                                confirmBulkDelete = true
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 12)
-                    .background(.bar)
-                }
             }
             .navigationTitle("Todos")
-            .environment(\.editMode, $editMode)
-            .onChange(of: editMode.isEditing) { if !editMode.isEditing { selection.removeAll() } }
-            // Switching category leaves selection mode entirely — a lingering action bar
-            // over another (possibly empty) list reads as broken.
-            .onChange(of: model.activeCategory) {
-                selection.removeAll()
-                editMode = .inactive
-            }
             .confirmationDialog(
-                "Delete \(selection.count) todo\(selection.count == 1 ? "" : "s")?",
-                isPresented: $confirmBulkDelete,
+                model.visibleTodos.count == 1
+                    ? "Delete the only todo?"
+                    : "Delete all \(model.visibleTodos.count) todos?",
+                isPresented: $confirmDeleteAll,
                 titleVisibility: .visible,
             ) {
-                Button("Delete", role: .destructive) {
-                    model.delete(ids: selection)
-                    selection.removeAll()
-                    editMode = .inactive
+                Button("Delete All", role: .destructive) {
+                    model.delete(ids: Set(model.visibleTodos.map { $0.id }))
                 }
             } message: {
-                Text("They will be removed from \"\(model.activeCategory)\".")
+                Text("Everything in \"\(model.activeCategory)\" will be deleted.")
             }
             .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
