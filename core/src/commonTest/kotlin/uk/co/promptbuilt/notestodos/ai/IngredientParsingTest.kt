@@ -31,6 +31,14 @@ class IngredientParsingTest {
     }
 
     @Test
+    fun nonRecipePageYieldsNothingInsteadOfThrowing() {
+        // A photographed page with no recipe on it (Claude answers {"error": ...})
+        // must not kill the conversion of the pages that DID have one.
+        val out = IngredientParsing.parseResponse("""{"error": "No recipe found in this photograph."}""")
+        assertEquals(emptyList(), out)
+    }
+
+    @Test
     fun recoversJsonWrappedInProse() {
         val out = IngredientParsing.parseResponse(
             """Here you go: {"ingredients": ["1 tsp salt"]} hope that helps""",

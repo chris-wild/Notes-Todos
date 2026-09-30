@@ -65,6 +65,11 @@ class IngredientTodosUseCase(
                     IngredientLine(name, quantity)
                 },
             ).filterNot { IngredientMath.isHeading(it) }
+            if (merged.isEmpty()) {
+                // Every page came back empty (non-recipe photos, blank pages): say so
+                // rather than silently creating an empty shopping list.
+                throw IllegalStateException("No ingredients found — the recipe's pages do not contain a readable ingredient list")
+            }
             if (merged.isNotEmpty()) {
                 val now = nowMillis()
                 recipes.replaceIngredients(

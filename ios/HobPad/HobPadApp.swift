@@ -22,6 +22,7 @@ struct HobPadApp: App {
             }
             .environment(services)
             .task { await services.ops.start() }
+            .task { await Task.detached(priority: .utility) { PdfCompactor.run() }.value }
         }
     }
 }

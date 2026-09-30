@@ -56,7 +56,11 @@ object IngredientParsing {
             return out.take(400)
         }
 
-        throw IllegalStateException("Claude extract failed: could not parse ingredients JSON")
+        // Valid JSON with neither key: the model looked and found no recipe (it answers
+        // {"error": "No recipe found…"} for, say, a photo of flowers attached by mistake).
+        // That page simply contributes nothing — the caller decides whether an entirely
+        // empty extraction is an error.
+        return emptyList()
     }
 
     private fun tryParse(text: String?): JsonObject? {
