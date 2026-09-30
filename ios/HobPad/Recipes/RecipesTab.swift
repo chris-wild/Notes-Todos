@@ -208,7 +208,7 @@ private struct RecipeViewerSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 if !recipe.notes.isEmpty {
                     ScrollView {
-                        Text(recipe.notes)
+                        LinkifiedText(text: recipe.notes)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 160)

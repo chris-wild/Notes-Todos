@@ -92,8 +92,7 @@ private struct NotesContent: View {
                         model.save(id: note.id, title: title, content: content)
                     },
                     onDelete: {
-                        editingNote = nil
-                        deleteTarget = note
+                        model.delete(note)
                     },
                 )
             }
@@ -106,6 +105,7 @@ private struct NotesContent: View {
                     if let note = deleteTarget { model.delete(note) }
                     deleteTarget = nil
                 }
+                Button("Cancel", role: .cancel) { deleteTarget = nil }
             } message: {
                 Text("\(deleteTarget?.title.isEmpty == false ? deleteTarget!.title : "This note") will be permanently deleted.")
             }
@@ -173,6 +173,7 @@ private struct NoteSheet: View {
     let onDelete: () -> Void
 
     @State private var editing = false
+    @State private var confirmingDelete = false
     @State private var title = ""
     @State private var content = ""
 
@@ -213,7 +214,7 @@ private struct NoteSheet: View {
                     }
                 } else {
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        Button("Delete", role: .destructive, action: onDelete)
+                        Button("Delete", role: .destructive) { confirmingDelete = true }
                         Button("Edit") {
                             title = note.title
                             content = note.content
@@ -222,6 +223,17 @@ private struct NoteSheet: View {
                         .buttonStyle(.borderedProminent)
                     }
                 }
+            }
+            // The confirmation lives INSIDE the sheet so it appears over the open
+            // note; the note only closes once the delete is confirmed.
+            .alert("Delete note?", isPresented: $confirmingDelete) {
+                Button("Delete", role: .destructive) {
+                    onDelete()
+                    dismiss()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("\(note.title.isEmpty ? "This note" : note.title) will be permanently deleted.")
             }
         }
     }
