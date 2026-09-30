@@ -56,6 +56,15 @@ final class TodosModel {
         Task { try? await core.todosRepository.deleteTodo(id: todo.id) }
     }
 
+    /// Bulk deletion for multi-select: ids are resolved against the CURRENT list first,
+    /// so a stale selection (e.g. a todo deleted elsewhere mid-edit) is simply skipped.
+    func delete(ids: Set<Int64>) {
+        let targets = allTodos.filter { ids.contains($0.id) }
+        Task {
+            for todo in targets { try? await core.todosRepository.deleteTodo(id: todo.id) }
+        }
+    }
+
     /// Returns false when the name is blank or already exists.
     func addCategory(_ name: String) async -> Bool {
         let added = (try? await core.todosRepository.addCategory(name: name).boolValue) ?? false

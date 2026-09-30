@@ -26,13 +26,22 @@ private struct TodosContent: View {
     @State private var categoryDraft = ""
     @State private var categoryError: String?
     @State private var confirmDeleteCategory = false
+    @State private var editMode: EditMode = .inactive
+    @State private var selection = Set<Int64>()
+    @State private var confirmBulkDelete = false
+
+    /// What the bulk button acts on: the selection, or the whole visible list when
+    /// nothing is ticked ("Delete All").
+    private var bulkTargets: Set<Int64> {
+        selection.isEmpty ? Set(model.visibleTodos.map { $0.id }) : selection
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 categoryStrip
                 addRow
-                List {
+                List(selection: $selection) {
                     if model.visibleTodos.isEmpty {
                         Text(model.query.isEmpty
                              ? "Nothing in \(model.activeCategory) yet — add one above."
@@ -69,7 +78,42 @@ private struct TodosContent: View {
             .navigationTitle("Todos")
             .toolbar {
                 // Standard list editing: the visible route to deletion (swipe still works).
-                EditButton()
+                // Edit mode adds selection circles; the bottom bar does the bulk work.
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
+                if editMode.isEditing {
+                    ToolbarItemGroup(placement: .bottomBar) {
+                        Button(selection.count == model.visibleTodos.count && !selection.isEmpty
+                               ? "Deselect All" : "Select All") {
+                            if selection.count == model.visibleTodos.count {
+                                selection.removeAll()
+                            } else {
+                                selection = Set(model.visibleTodos.map { $0.id })
+                            }
+                        }
+                        Spacer()
+                        Button(selection.isEmpty ? "Delete All" : "Delete Selected (\(selection.count))",
+                               role: .destructive) {
+                            confirmBulkDelete = true
+                        }
+                        .disabled(model.visibleTodos.isEmpty)
+                    }
+                }
+            }
+            .environment(\.editMode, $editMode)
+            .onChange(of: editMode.isEditing) { if !editMode.isEditing { selection.removeAll() } }
+            .onChange(of: model.activeCategory) { selection.removeAll() }
+            .confirmationDialog(
+                "Delete \(bulkTargets.count) todo\(bulkTargets.count == 1 ? "" : "s")?",
+                isPresented: $confirmBulkDelete,
+                titleVisibility: .visible,
+            ) {
+                Button("Delete", role: .destructive) {
+                    model.delete(ids: bulkTargets)
+                    selection.removeAll()
+                    editMode = .inactive
+                }
+            } message: {
+                Text("They will be removed from \"\(model.activeCategory)\".")
             }
             .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
