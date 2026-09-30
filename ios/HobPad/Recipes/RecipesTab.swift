@@ -353,9 +353,6 @@ private struct ConvertSheet: View {
                         Text("Quantities ×\(multiplier)")
                             .fontWeight(multiplier == 1 ? .regular : .semibold)
                     }
-                    Text("Multiplies every ingredient — ×3 triples the shopping list.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
                 } header: {
                     Text("Cooking for more?")
                 }

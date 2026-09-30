@@ -175,10 +175,15 @@ private struct TodosContent: View {
 
     private var addRow: some View {
         HStack {
+            // Filled capsule like the search bar above it: unmistakably a place to type
+            // (the bare rounded border read as decoration on iOS 26 — Chris, Sept 30).
             TextField("Add to \(model.activeCategory)…", text: $newTodo)
-                .textFieldStyle(.roundedBorder)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Color(.secondarySystemBackground), in: Capsule())
                 .onSubmit(submit)
             Button("Add", action: submit)
+                .buttonStyle(.borderedProminent)
                 .disabled(newTodo.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(.horizontal)
