@@ -74,14 +74,11 @@ private struct TodosContent: View {
                     }
                 }
                 .listStyle(.plain)
-            }
-            .navigationTitle("Todos")
-            .toolbar {
-                // Standard list editing: the visible route to deletion (swipe still works).
-                // Edit mode adds selection circles; the bottom bar does the bulk work.
-                ToolbarItem(placement: .topBarTrailing) { EditButton() }
                 if editMode.isEditing {
-                    ToolbarItemGroup(placement: .bottomBar) {
+                    // The bulk action bar lives IN the layout, not in a .bottomBar toolbar:
+                    // iOS 26's floating tab bar renders OVER toolbar bottom bars (reported
+                    // from Chris's phone, reproduced on the iOS 26.5 simulator).
+                    HStack {
                         Button(selection.count == model.visibleTodos.count && !selection.isEmpty
                                ? "Deselect All" : "Select All") {
                             if selection.count == model.visibleTodos.count {
@@ -97,7 +94,15 @@ private struct TodosContent: View {
                         }
                         .disabled(model.visibleTodos.isEmpty)
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 12)
+                    .background(.bar)
                 }
+            }
+            .navigationTitle("Todos")
+            .toolbar {
+                // Standard list editing: the visible route to deletion (swipe still works).
+                ToolbarItem(placement: .topBarTrailing) { EditButton() }
             }
             .environment(\.editMode, $editMode)
             .onChange(of: editMode.isEditing) { if !editMode.isEditing { selection.removeAll() } }
