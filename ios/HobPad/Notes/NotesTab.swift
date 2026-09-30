@@ -96,10 +96,11 @@ private struct NotesContent: View {
                     },
                 )
             }
-            .confirmationDialog(
+            // An alert, not a confirmationDialog: iOS 26 renders dialogs without the
+            // automatic Cancel button they used to get (Chris's report, Sept 30).
+            .alert(
                 "Delete note?",
                 isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
-                titleVisibility: .visible,
             ) {
                 Button("Delete", role: .destructive) {
                     if let note = deleteTarget { model.delete(note) }

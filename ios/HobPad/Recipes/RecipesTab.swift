@@ -124,15 +124,17 @@ private struct RecipesContent: View {
                     cameraFallbackItem = nil
                 }
             }
-            .confirmationDialog(
+            // An alert, not a confirmationDialog: iOS 26 renders dialogs without the
+            // automatic Cancel button they used to get (Chris's report, Sept 30).
+            .alert(
                 "Delete recipe?",
                 isPresented: Binding(get: { deleteTarget != nil }, set: { if !$0 { deleteTarget = nil } }),
-                titleVisibility: .visible,
             ) {
                 Button("Delete", role: .destructive) {
                     if let recipe = deleteTarget { model.delete(recipe) }
                     deleteTarget = nil
                 }
+                Button("Cancel", role: .cancel) { deleteTarget = nil }
             } message: {
                 Text("\"\(deleteTarget?.name ?? "")\" and its attachments will be permanently deleted.")
             }
@@ -285,15 +287,15 @@ private struct RecipeViewerSheet: View {
             .sheet(isPresented: $paywallOpen) {
                 PaywallSheet(ops: model.ops)
             }
-            .confirmationDialog(
+            .alert(
                 "Delete recipe?",
                 isPresented: $confirmDelete,
-                titleVisibility: .visible,
             ) {
                 Button("Delete", role: .destructive) {
                     model.delete(recipe)
                     dismiss()
                 }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text("\"\(recipe.name)\" and its attachments will be permanently deleted.")
             }

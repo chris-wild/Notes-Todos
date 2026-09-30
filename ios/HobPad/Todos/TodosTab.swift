@@ -96,12 +96,13 @@ private struct TodosContent: View {
             }
             // Changing category is "I'm done typing here" too.
             .onChange(of: model.activeCategory) { addFieldFocused = false }
-            .confirmationDialog(
+            // An alert, not a confirmationDialog: iOS 26 renders dialogs without the
+            // automatic Cancel button they used to get (Chris's report, Sept 30).
+            .alert(
                 model.visibleTodos.count == 1
                     ? "Delete the only todo?"
                     : "Delete all \(model.visibleTodos.count) todos?",
                 isPresented: $confirmDeleteAll,
-                titleVisibility: .visible,
             ) {
                 Button("Delete All", role: .destructive) {
                     // Emptying a non-default category removes the category too — but only
@@ -111,6 +112,7 @@ private struct TodosContent: View {
                         removeCategory: !model.activeIsDefault && model.query.isEmpty,
                     )
                 }
+                Button("Cancel", role: .cancel) {}
             } message: {
                 Text(!model.activeIsDefault && model.query.isEmpty
                      ? "Everything in \"\(model.activeCategory)\" will be deleted, and the empty category removed."
