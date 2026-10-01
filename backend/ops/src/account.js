@@ -7,7 +7,8 @@
 // Storage layout (key-value API over the SQLite backend, RiderNav convention):
 //   "meta"      -> { createdAt, freeGranted }         written once
 //   "balance"   -> integer ops remaining              may go NEGATIVE after a refund
-//   "txn:<id>"  -> { ops, productId, environment, refunded, at }   the money trail, kept forever
+//   "txn:<id>"  -> { ops, productId, environment | platform+orderId+purchaseType, refunded, at }
+//                  the money trail, kept forever; <id> is Apple's transaction id or "google:…"
 //   "op:<id>"   -> { pages, at }                      a spend reservation; deleted on settle
 //   "titles"    -> { day, count }                     free-title rate limit window
 
@@ -65,8 +66,9 @@ export class OpsAccount extends DurableObject {
   }
 
   /**
-   * Credit a verified purchase. Idempotent by Apple transaction id, so a replayed JWS —
-   * or the client's retry after a lost response — can never double-credit.
+   * Credit a verified purchase. Idempotent by transaction id (Apple's, or "google:<orderId>"),
+   * so a replayed JWS or purchase token — or the client's retry after a lost response — can
+   * never double-credit.
    * A purchase also creates the account (no address rationing: money changed hands).
    */
   async credit(txnId, ops, detail) {
@@ -93,7 +95,7 @@ export class OpsAccount extends DurableObject {
   }
 
   /**
-   * Apple refunded a pack: take its ops back, letting the balance go negative — an account
+   * The store refunded a pack: take its ops back, letting the balance go negative — an account
    * that spent a refunded pack stays underwater until the next purchase, which is exactly
    * the deterrent buy-use-refund farming needs. Idempotent per transaction.
    */

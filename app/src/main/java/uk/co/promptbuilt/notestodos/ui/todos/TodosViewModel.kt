@@ -2,6 +2,7 @@ package uk.co.promptbuilt.notestodos.ui.todos
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.flow.filterNotNull
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,7 +25,18 @@ data class TodosUiState(
 class TodosViewModel(
     private val repository: TodosRepository,
     private val savedState: SavedStateHandle,
+    pendingCategory: MutableStateFlow<String?> = MutableStateFlow(null),
 ) : ViewModel() {
+
+    init {
+        // Set by Recipes after it creates an ingredient list: open that list's category.
+        viewModelScope.launch {
+            pendingCategory.filterNotNull().collect { category ->
+                selectCategory(category)
+                pendingCategory.value = null
+            }
+        }
+    }
 
     private val query = MutableStateFlow("")
 

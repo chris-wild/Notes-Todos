@@ -1,16 +1,26 @@
 package uk.co.promptbuilt.notestodos.ui.recipes
 
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import uk.co.promptbuilt.notestodos.ai.AnthropicClient
 import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
+import uk.co.promptbuilt.notestodos.ai.InsufficientOpsException
+import uk.co.promptbuilt.notestodos.ai.OcrService
+import uk.co.promptbuilt.notestodos.data.AppPrefs
+import uk.co.promptbuilt.notestodos.store.OpsStore
 import uk.co.promptbuilt.notestodos.backup.SafBackup
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
 import uk.co.promptbuilt.notestodos.data.RecipesRepository
@@ -22,13 +32,31 @@ data class RecipesUiState(
     val recipes: List<RecipeEntity> = emptyList(),
     val attachmentsByRecipe: Map<Long, List<RecipeAttachmentEntity>> = emptyMap(),
     val query: String = "",
-    /** True when an Anthropic key is stored (replaces GET /api/features). */
-    val ingredientAutomation: Boolean = false,
+    /** True when a personal Anthropic key is stored (only honoured in debug builds). */
+    val hasKey: Boolean = false,
     /** Non-null while a long operation runs; shown as a blocking overlay. */
     val working: String? = null,
     /** One-shot status/error text shown until dismissed or replaced. */
     val message: String? = null,
+    /** A captured recipe waiting for the user to type its name (limit reached or naming failed). */
+    val pendingName: PendingName? = null,
 )
+
+/**
+ * Automatic naming is budgeted (each call costs money server-side) and can fail; either way the
+ * photo is already saved under a date-stamped name, and this asks for the real one.
+ */
+data class PendingName(val recipeId: Long, val reason: Reason) {
+    enum class Reason { DAILY_LIMIT, NAMING_FAILED }
+}
+
+/** How a Create ingredient list tap proceeds, decided before any credit copy is shown. */
+sealed interface ConversionGate {
+    /** No credits involved: a debug build's own key, or ingredients already extracted. */
+    data object Free : ConversionGate
+    data class Confirm(val cost: Int) : ConversionGate
+    data object Paywall : ConversionGate
+}
 
 class RecipesViewModel(
     private val repository: RecipesRepository,
@@ -37,19 +65,24 @@ class RecipesViewModel(
     private val ingredientTodos: IngredientTodosUseCase,
     private val backupManager: SafBackup,
     private val anthropicClient: AnthropicClient,
+    private val ocr: OcrService,
+    private val opsStore: OpsStore,
+    private val appPrefs: AppPrefs,
+    private val usesByoKey: () -> Boolean,
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
     private val working = MutableStateFlow<String?>(null)
     private val message = MutableStateFlow<String?>(null)
+    private val pendingName = MutableStateFlow<PendingName?>(null)
 
     val uiState: StateFlow<RecipesUiState> = combine(
         repository.observeRecipes(),
         repository.observeAttachments(),
         query,
         secureKeys.hasAnthropicKey,
-        combine(working, message) { w, m -> w to m },
-    ) { recipes, attachments, q, hasKey, workingMessage ->
+        combine(working, message, pendingName) { w, m, p -> Triple(w, m, p) },
+    ) { recipes, attachments, q, hasKey, transient ->
         val filtered = if (q.isBlank()) {
             recipes
         } else {
@@ -61,9 +94,10 @@ class RecipesViewModel(
             recipes = filtered,
             attachmentsByRecipe = attachments.groupBy { it.recipeId },
             query = q,
-            ingredientAutomation = hasKey,
-            working = workingMessage.first,
-            message = workingMessage.second,
+            hasKey = hasKey,
+            working = transient.first,
+            message = transient.second,
+            pendingName = transient.third,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecipesUiState())
 
@@ -129,36 +163,35 @@ class RecipesViewModel(
     }
 
     /**
-     * "Take photo of recipe": the captured image has already been converted to a
-     * PDF by importAttachment; create a recipe around it and name it with Claude
-     * when a key is present.
+     * "Take photo of recipe": the captured image is already a PDF (importAttachment). The recipe
+     * is created under a unique date-stamped name, then named by the metered title call, within
+     * the daily budget. Past the budget, or if naming fails, the user types the name instead.
      */
     fun createFromCapture(imported: RecipeFiles.Imported) {
         viewModelScope.launch {
             working.value = "Creating recipe…"
             try {
-                val recipeId = repository.create("Photographed recipe", "")
+                val recipeId = repository.create(photographedFallbackName(), "")
                 repository.addAttachment(recipeId, imported.fileName, imported.originalName)
 
-                val apiKey = secureKeys.getAnthropicKey()
-                val pdfBytes = recipeFiles.read(imported.fileName)
-                if (apiKey != null && pdfBytes != null) {
-                    working.value = "Naming recipe…"
-                    val title = try {
-                        anthropicClient.extractRecipeTitle(pdfBytes, apiKey)
-                    } catch (e: Exception) {
-                        message.value = "Could not name the recipe: ${e.message}"
+                if (!usesByoKey() && !appPrefs.autoNameAllowed(opsStore.state.value.namingExempt)) {
+                    pendingName.value = PendingName(recipeId, PendingName.Reason.DAILY_LIMIT)
+                    return@launch
+                }
+                appPrefs.countAutoName()
+                working.value = "Naming recipe…"
+                val title = recipeFiles.read(imported.fileName)?.let { pdf ->
+                    try {
+                        ocr.extractRecipeTitle(pdf)
+                    } catch (_: Exception) {
                         null
                     }
-                    if (title != null) {
-                        repository.update(recipeId, title, "")
-                        message.value = "Recipe \"$title\" created from photo"
-                    } else if (message.value == null) {
-                        message.value = "Recipe created from photo"
-                    }
+                }
+                if (title != null) {
+                    repository.update(recipeId, title, "")
+                    message.value = "Recipe \"$title\" created from photo"
                 } else {
-                    message.value = "Recipe created from photo" +
-                        if (apiKey == null) " (add an API key for automatic naming)" else ""
+                    pendingName.value = PendingName(recipeId, PendingName.Reason.NAMING_FAILED)
                 }
             } catch (e: Exception) {
                 message.value = "Could not create recipe: ${e.message}"
@@ -168,18 +201,85 @@ class RecipesViewModel(
         }
     }
 
-    /** Port of the web "Create ingredient list" action; navigates to Todos on success. */
-    fun createIngredientTodos(recipeId: Long, multiplier: Int = 1, onSuccess: () -> Unit) {
+    /** The name dialog's Save; a blank name keeps the date-stamped fallback. */
+    fun renamePending(name: String) {
+        val pending = pendingName.value ?: return
+        pendingName.value = null
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            val notes = repository.getById(pending.recipeId)?.notes.orEmpty()
+            repository.update(pending.recipeId, trimmed, notes)
+        }
+    }
+
+    fun dismissPendingName() {
+        pendingName.value = null
+    }
+
+    /** "Photographed 1 Oct 2026", with " (2)", " (3)" and so on when that name is taken. */
+    private suspend fun photographedFallbackName(): String {
+        val base = "Photographed " + SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date())
+        val names = repository.observeRecipes().first().map { it.name }.toSet()
+        if (base !in names) return base
+        var n = 2
+        while ("$base ($n)" in names) n++
+        return "$base ($n)"
+    }
+
+    /**
+     * Decides the gate before showing any credit copy: a recipe whose ingredients were already
+     * extracted re-runs from the cache (no API call, no charge), so it never asks about credits.
+     */
+    suspend fun conversionGate(recipe: RecipeEntity): ConversionGate {
+        if (usesByoKey()) return ConversionGate.Free
+        if (repository.getIngredients(recipe.id).isNotEmpty()) return ConversionGate.Free
+        opsStore.refreshBalance()
+        val cost = opsCost(recipe)
+        return if ((opsStore.state.value.balance ?: 0) < cost) ConversionGate.Paywall else ConversionGate.Confirm(cost)
+    }
+
+    /**
+     * What converting costs, mirroring the Worker's billing: one credit per PDF page, or one
+     * for a notes-only recipe. A preview only; the Worker's own page count is what is charged.
+     */
+    private suspend fun opsCost(recipe: RecipeEntity): Int {
+        val attachments = repository.getAttachments(recipe.id)
+        if (attachments.isEmpty()) return 1
+        return attachments.sumOf { attachment ->
+            try {
+                ParcelFileDescriptor.open(recipeFiles.fileFor(attachment.fileName), ParcelFileDescriptor.MODE_READ_ONLY)
+                    .use { fd -> PdfRenderer(fd).use { it.pageCount } }
+            } catch (_: Exception) {
+                1
+            }
+        }.coerceAtLeast(1)
+    }
+
+    /**
+     * Port of the web "Create ingredient list" action. [onSuccess] receives the new todo
+     * category; [onNeedsCredits] opens the paywall when the Worker reports a shortfall (its own
+     * page count can exceed the preview).
+     */
+    fun createIngredientTodos(
+        recipeId: Long,
+        multiplier: Int = 1,
+        onNeedsCredits: () -> Unit,
+        onSuccess: (String) -> Unit,
+    ) {
         viewModelScope.launch {
             working.value = "Extracting ingredients…"
             try {
                 val outcome = ingredientTodos.run(recipeId, multiplier)
                 message.value = "Added ${outcome.count} ingredients to \"${outcome.category}\""
-                onSuccess()
+                onSuccess(outcome.category)
+            } catch (e: InsufficientOpsException) {
+                onNeedsCredits()
             } catch (e: Exception) {
                 message.value = e.message ?: "Ingredient extraction failed"
             } finally {
                 working.value = null
+                opsStore.refreshBalance()
             }
         }
     }

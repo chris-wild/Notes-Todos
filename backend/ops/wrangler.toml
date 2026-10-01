@@ -1,6 +1,7 @@
 # HobPad recipe-conversion metering proxy. Deployed by scripts/ops-deploy.sh, never by an app build.
 # Secrets (wrangler secret put, per deployed name): ANTHROPIC_API_KEY, and APP_APPLE_ID once the
-# App Store Connect app record exists (needed to verify Production-environment purchases).
+# App Store Connect app record exists (needed to verify Production-environment purchases), and
+# GOOGLE_SERVICE_ACCOUNT_JSON (a Play Developer API service-account key) for Android purchases.
 name = "hobpad-ops"
 main = "src/index.js"
 # The newest date the pinned workerd (wrangler 4.133.0) accepts; the nodejs_compat flag is
@@ -21,16 +22,33 @@ class_name = "OpsAccount"
 name = "LIMITER"
 class_name = "Limiter"
 
+[[durable_objects.bindings]]
+name = "GOOGLE_ORDERS"
+class_name = "GoogleOrders"
+
 # SQLite-backed storage is the only kind the Workers Free plan allows (RiderNav ruling 2026-09-17).
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["OpsAccount", "Limiter"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["GoogleOrders"]
+
+# Google Play refunds are polled (src/google.js): the Voided Purchases API only looks back
+# 30 days, so a pass every six hours leaves ample room for missed runs.
+[triggers]
+crons = ["0 */6 * * *"]
 
 [vars]
 BUNDLE_ID = "uk.co.promptbuilt.hobpad"
 # Sandbox stays allowed until App Store launch: App Review buys in sandbox, and Chris's
 # sideloaded Release builds produce Sandbox-environment purchases. Tighten at launch.
 ALLOWED_ENVIRONMENTS = "Production,Sandbox"
+PLAY_PACKAGE_NAME = "uk.co.promptbuilt.hobpad"
+# License-tester (test) Play purchases stay allowed until Android launch: closed testing buys
+# with tester accounts, which Google reports as purchaseType 0. Tighten (remove) at launch.
+ALLOW_GOOGLE_TEST_PURCHASES = "1"
 # Server-authoritative credit map — the paywall's display copy must agree
 # (ios/HobPad/Store/PaywallSheet.swift).
 PRODUCT_CREDITS = '{"uk.co.promptbuilt.hobpad.ops50":50,"uk.co.promptbuilt.hobpad.ops100":100,"uk.co.promptbuilt.hobpad.ops500":500}'

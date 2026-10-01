@@ -23,6 +23,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import uk.co.promptbuilt.notestodos.ui.common.LinkifiedText
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -54,7 +59,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import java.io.File
 import java.text.DateFormat
 import java.util.Date
+import uk.co.promptbuilt.notestodos.BuildConfig
 import uk.co.promptbuilt.notestodos.NotesTodosApp
+import uk.co.promptbuilt.notestodos.data.AppPrefs
 import uk.co.promptbuilt.notestodos.backup.DriveBackup
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
 import uk.co.promptbuilt.notestodos.data.db.RecipeAttachmentEntity
@@ -72,15 +79,34 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             app.ingredientTodosUseCase,
             app.safBackup,
             app.anthropicClient,
+            app.ocrService,
+            app.opsStore,
+            app.appPrefs,
+            app::usesByoKey,
         )
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val ops by app.opsStore.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     var editingRecipe by remember { mutableStateOf<RecipeEntity?>(null) }
     var composerOpen by rememberSaveable { mutableStateOf(false) }
     var viewingRecipe by remember { mutableStateOf<RecipeEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<RecipeEntity?>(null) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var paywallOpen by remember { mutableStateOf(false) }
+    // The recipe being converted, with its credit cost (null cost = converts free).
+    var converting by remember { mutableStateOf<Pair<RecipeEntity, Int?>?>(null) }
+
+    fun startConversion(recipe: RecipeEntity) {
+        scope.launch {
+            when (val gate = viewModel.conversionGate(recipe)) {
+                ConversionGate.Free -> converting = recipe to null
+                is ConversionGate.Confirm -> converting = recipe to gate.cost
+                ConversionGate.Paywall -> paywallOpen = true
+            }
+        }
+    }
 
     // "Take photo of recipe": camera writes to a FileProvider Uri in cache/captures/.
     var captureUri by remember { mutableStateOf<Uri?>(null) }
@@ -239,16 +265,51 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             recipe = recipe,
             attachments = state.attachmentsByRecipe[recipe.id].orEmpty(),
             recipeFiles = app.recipeFiles,
-            ingredientAutomation = state.ingredientAutomation,
             working = state.working != null,
-            onCreateIngredients = { multiplier ->
-                viewModel.createIngredientTodos(recipe.id, multiplier) {
-                    viewingRecipe = null
-                    onOpenTodos()
-                }
-            },
+            onCreateIngredients = { startConversion(recipe) },
             onClose = { viewingRecipe = null },
         )
+    }
+
+    converting?.let { (recipe, cost) ->
+        ConvertDialog(
+            cost = cost,
+            balance = ops.balance,
+            working = state.working != null,
+            onCreate = { multiplier ->
+                viewModel.createIngredientTodos(
+                    recipe.id,
+                    multiplier,
+                    onNeedsCredits = {
+                        converting = null
+                        paywallOpen = true
+                    },
+                    onSuccess = { category ->
+                        converting = null
+                        viewingRecipe = null
+                        app.pendingTodoCategory.value = category
+                        onOpenTodos()
+                    },
+                )
+            },
+            onCancel = { converting = null },
+        )
+    }
+
+    state.pendingName?.let { pending ->
+        NameRecipeDialog(
+            dailyLimit = pending.reason == PendingName.Reason.DAILY_LIMIT,
+            onSave = viewModel::renamePending,
+            onBuyCredits = {
+                viewModel.dismissPendingName()
+                paywallOpen = true
+            },
+            onCancel = viewModel::dismissPendingName,
+        )
+    }
+
+    if (paywallOpen) {
+        PaywallDialog(opsStore = app.opsStore, onClose = { paywallOpen = false })
     }
 
     deleteTarget?.let { recipe ->
@@ -272,9 +333,15 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
 
     if (settingsOpen) {
         SettingsDialog(
-            hasKey = state.ingredientAutomation,
+            hasKey = state.hasKey,
             viewModel = viewModel,
             driveBackup = app.driveBackup,
+            balance = ops.balance,
+            appPrefs = app.appPrefs,
+            onBuyCredits = {
+                settingsOpen = false
+                paywallOpen = true
+            },
             onClose = { settingsOpen = false },
         )
     }
@@ -468,14 +535,10 @@ private fun RecipeViewerDialog(
     recipe: RecipeEntity,
     attachments: List<RecipeAttachmentEntity>,
     recipeFiles: RecipeFiles,
-    ingredientAutomation: Boolean,
     working: Boolean,
-    onCreateIngredients: (Int) -> Unit,
+    onCreateIngredients: () -> Unit,
     onClose: () -> Unit,
 ) {
-    // Scales the shopping list (cooking for more): quantities are multiplied when the
-    // ingredient list is created; a cached recipe re-runs free at any multiplier.
-    var multiplier by remember { mutableIntStateOf(1) }
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -493,26 +556,10 @@ private fun RecipeViewerDialog(
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    if (ingredientAutomation) {
-                        TextButton(onClick = { onCreateIngredients(multiplier) }, enabled = !working) {
-                            Text("Create ingredient list")
-                        }
-                    }
                     TextButton(onClick = onClose) { Text("Close") }
                 }
-                if (ingredientAutomation) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "Quantities ×$multiplier",
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = { if (multiplier > 1) multiplier-- }, enabled = multiplier > 1) { Text("−") }
-                        TextButton(onClick = { if (multiplier < 10) multiplier++ }, enabled = multiplier < 10) { Text("+") }
-                    }
-                }
                 if (recipe.notes.isNotBlank()) {
-                    Text(
+                    LinkifiedText(
                         text = recipe.notes,
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier
@@ -534,6 +581,17 @@ private fun RecipeViewerDialog(
                         )
                     }
                 }
+                // The primary action is always visible and full width, as on iOS; credits,
+                // quantities and cost are handled in the dialog it opens.
+                Button(
+                    onClick = onCreateIngredients,
+                    enabled = !working,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                ) {
+                    Text("Create ingredient list")
+                }
             }
         }
     }
@@ -544,8 +602,12 @@ private fun SettingsDialog(
     hasKey: Boolean,
     viewModel: RecipesViewModel,
     driveBackup: DriveBackup,
+    balance: Int?,
+    appPrefs: AppPrefs,
+    onBuyCredits: () -> Unit,
     onClose: () -> Unit,
 ) {
+    var units by remember { mutableStateOf(appPrefs.units) }
     var keyDraft by remember { mutableStateOf("") }
     var confirmImport by remember { mutableStateOf<Uri?>(null) }
 
@@ -563,12 +625,62 @@ private fun SettingsDialog(
         title = { Text("Settings") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                Text("Anthropic API key", style = MaterialTheme.typography.titleSmall)
+                Text("Recipe conversions", style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Credits remaining", modifier = Modifier.weight(1f))
+                    Text(balance?.toString() ?: "–", style = MaterialTheme.typography.titleSmall)
+                }
+                Text(
+                    text = "One credit converts one recipe page into a shopping list. " +
+                        "Naming photographed recipes is free.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onBuyCredits) { Text("Buy credits") }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Text("Units", style = MaterialTheme.typography.titleSmall)
+                listOf(
+                    AppPrefs.Units.AUTOMATIC to "Automatic",
+                    AppPrefs.Units.METRIC to "Metric (g, ml)",
+                    AppPrefs.Units.US to "US (oz, cups)",
+                ).forEach { (option, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                appPrefs.units = option
+                                units = option
+                            },
+                    ) {
+                        RadioButton(
+                            selected = units == option,
+                            onClick = {
+                                appPrefs.units = option
+                                units = option
+                            },
+                        )
+                        Text(label)
+                    }
+                }
+                Text(
+                    text = "Ingredient lists are converted to these units, whatever the recipe uses. " +
+                        "Automatic follows your device region.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                // A personal key bypasses metering: a developer tool, absent from release builds.
+                if (BuildConfig.DEBUG) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text("Anthropic API key (dev build)", style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = if (hasKey) {
-                        "A key is stored securely on this device. It unlocks \"Create ingredient list\" and photo naming."
+                        "A key is stored on this device. Extraction bypasses metering while it is present."
                     } else {
-                        "Add a key to unlock \"Create ingredient list\" and automatic naming of photographed recipes."
+                        "Add a key to bypass metering in this dev build. It is stored on this device and never backed up."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -592,6 +704,7 @@ private fun SettingsDialog(
                     if (hasKey) {
                         TextButton(onClick = viewModel::deleteAnthropicKey) { Text("Remove key") }
                     }
+                }
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))

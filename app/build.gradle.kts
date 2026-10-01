@@ -38,10 +38,16 @@ android {
     }
 
     buildTypes {
+        // The metering Worker (backend/ops), as on iOS: development builds talk to staging, which
+        // also accepts test purchases; release builds talk to production.
+        debug {
+            buildConfigField("String", "OPS_WORKER_URL", "\"https://hobpad-ops-staging.chris-f50.workers.dev\"")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
+            buildConfigField("String", "OPS_WORKER_URL", "\"https://hobpad-ops.chris-f50.workers.dev\"")
         }
     }
 
@@ -52,6 +58,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -82,6 +89,9 @@ dependencies {
     implementation(libs.play.services.auth)
     implementation(libs.work.runtime.ktx)
     implementation(libs.okhttp)
+
+    // Credit packs (store/OpsStore.kt), verified server-side by the Worker.
+    implementation(libs.play.billing)
 
     testImplementation(libs.junit)
 }

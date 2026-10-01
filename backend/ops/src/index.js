@@ -10,6 +10,9 @@
 //   POST /v1/title             base64 PDF  -> Anthropic Messages JSON, FREE (daily-capped)
 //   POST /v1/purchase  {jws}   no bearer   -> { balance, credited, duplicate } (verified JWS)
 //   POST /v1/asn  {signedPayload}          -> App Store Server Notifications V2 (refunds)
+//   POST /v1/purchase/google  {packageName, productId, purchaseToken}
+//                                          -> { balance, credited, duplicate } (Play-verified)
+//   cron "0 */6 * * *"                     -> Google Play voided purchases (refunds)
 //
 // PERFORMANCE CONTRACT (Workers Free = 10 ms CPU per request): the multi-megabyte PDF
 // payload is only ever base64-decoded/encoded and regex-scanned with native primitives.
@@ -18,8 +21,10 @@
 
 import { accountStub, isUuid } from "./account-stub.js";
 import { applyNotification, creditPurchase, creditVerified } from "./purchase.js";
+import { checkVoidedPurchases, creditGooglePurchase } from "./google.js";
 
 export { Limiter, OpsAccount } from "./account.js";
+export { GoogleOrders } from "./google-orders.js";
 
 // ---- the Anthropic calls -----------------------------------------------------------------
 // Model, version and prompts are DUPLICATES of core AnthropicClient.kt (the BYO-key path).
@@ -172,9 +177,41 @@ export default {
     console.log(JSON.stringify({ op: `${request.method} /${parts.join("/")}`.split("?")[0], status: response.status }));
     return response;
   },
+
+  // Rethrowing marks the cron run failed in the dashboard; the next run retries from the
+  // unchanged checkpoint.
+  async scheduled(controller, env) {
+    try {
+      console.log(JSON.stringify({ op: "voided_purchases", ...(await checkVoidedPurchases(env)) }));
+    } catch (e) {
+      console.log(JSON.stringify({ op: "voided_purchases", error: String(e?.message || e) }));
+      throw e;
+    }
+  },
 };
 
+// A Play purchase token is at most a few hundred characters; anything far larger is not a
+// purchase and is refused before it is parsed.
+const MAX_GOOGLE_PURCHASE_BODY = 8192;
+
 async function route(request, env, url, parts) {
+  // Google purchases need the bearer: unlike Apple's JWS, nothing in the request names the
+  // account, and the verified purchase must carry the same token (obfuscatedExternalAccountId).
+  if (parts.length === 3 && parts[0] === "v1" && parts[1] === "purchase" && parts[2] === "google") {
+    if (request.method !== "POST") return fail(404, "not_found");
+    const token = bearerToken(request);
+    if (!token) return fail(401, { type: "unauthorised", message: "A bearer account token is required." });
+    const raw = await request.text();
+    let body;
+    try {
+      if (raw.length > MAX_GOOGLE_PURCHASE_BODY) throw new Error("too large");
+      body = JSON.parse(raw);
+    } catch {
+      return fail(422, { type: "bad_request", message: "The body must be a small JSON object." });
+    }
+    const r = await creditGooglePurchase(env, token, body);
+    return json(r.status, r.body);
+  }
   if (parts[0] !== "v1" || parts.length !== 2) return fail(404, "not_found");
   const endpoint = parts[1];
   const method = request.method;

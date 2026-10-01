@@ -42,7 +42,7 @@ Each decision carries a recommendation. None of them should be settled by the im
 
 **D1. Application ID. Decided and done 1 October 2026.** The Android application ID is now `uk.co.promptbuilt.hobpad`, matching iOS (version 0.3.0, version code 3). The code namespace stays `uk.co.promptbuilt.notestodos`. The camera's FileProvider authority now derives from the application ID, because a hardcoded authority would have blocked installing the new app beside the old one. The OnePlus was migrated by copying the old app's data into the new one, verified identical (every record count, a hash of all note contents, and all 63 PDF checksums), and the old app was then uninstalled. The Anthropic key could not be carried over, since it was encrypted with a key belonging to the old app, so it must be re-entered.
 
-**D2. Bring-your-own key in release builds.** On iOS the personal-key path exists only in Debug builds. The recommendation is the same for Android. Release builds meter through the Worker, and the key field becomes a debug-only developer tool.
+**D2. Bring-your-own key in release builds. Decided and done 1 October 2026.** As on iOS, release builds meter through the Worker and the personal key is a debug-only developer tool.
 
 **D3. Credit balances across platforms.** HobPad has no accounts. A customer with both an iPhone and an Android phone would therefore hold two separate balances, one per platform identity. Sharing a balance would require sign-in, which contradicts the product's position. The recommendation is to keep separate balances and state this in the support FAQ.
 
@@ -158,6 +158,25 @@ Size: medium in effort, with the elapsed time set by Phase 0.
 ### Phase 6. Large screens (after launch)
 
 The OnePlus is a foldable, and its inner screen is close to a tablet. A list-and-detail layout for Recipes and Notes, built with the Compose adaptive layout libraries, would match the iPad experience. This is polish, not a launch requirement.
+
+## Status, 1 October 2026 (evening)
+
+Chris asked for full iOS parity, including the web service and the retirement of the on-device key. The following is built, committed and verified on the emulator against the staging Worker.
+
+1. **Metered conversion (D2 done).** Android uses `MeteredOcrClient` through `SwitchingOcrService`, with the personal key honoured only in debug builds and its Settings section absent from release builds (verified in a release build). Debug builds use the staging Worker and release builds production, as on iOS.
+2. **Account identity.** `store/OpsAccount.kt` mints an anonymous UUID in a plain SharedPreferences file that Android's backup and phone-to-phone transfer include. Block Store was not needed for this.
+3. **Credits and Play Billing.** `store/OpsStore.kt` (Billing Library 8.0.0) loads the three packs, buys with the account as the obfuscated account id, submits to the Worker and consumes only after a 2xx, and resubmits unconsumed purchases at launch and on paywall open. The paywall, the Settings credits section and the conversion gate mirror iOS.
+4. **Conversion flow.** The viewer has an always-visible, full-width Create ingredient list button. The conversion dialog holds the quantities stepper and states the credit cost or the free re-run, and success opens the new todo category. Verified: a recipe in cups and pounds converted to grams through the staging Worker, one credit was charged, and the re-run showed as free.
+5. **Naming allowance and units (Phase 3 done).** Photographed recipes get date-stamped names and are named through the metered service within 30 per day, with the purchased-credit exemption and the Save, Buy credits and Cancel dialog. The Units setting (Automatic, Metric, US) is passed to extraction. Verified on the emulator.
+6. **Worker.** `POST /v1/purchase/google` and a six-hourly voided-purchases refund pass (`src/google.js`, `src/google-orders.js`), 41 of 41 tests passing, deployed to **staging only**. Production is deliberately unchanged while iOS 1.0.1 is in App Review.
+
+**Blocked, needing Chris.**
+
+1. **Merchant account.** Play Console reports that a merchant account (Google payments profile) must be set up before HobPad can sell anything. This involves bank and tax details.
+2. **Service account for purchase verification.** A Google Cloud service account with the Google Play Android Developer API enabled, a JSON key stored as the Worker secret `GOOGLE_SERVICE_ACCOUNT_JSON` on both Workers, and an invitation in Play Console with "View financial data, orders, and cancellation survey responses" and "Manage orders and subscriptions".
+3. **Products and a real purchase test.** Once the merchant account exists, the three one-time products are created with the same IDs and prices, and a licence-tester purchase is verified end to end on an internal testing build.
+
+**Known issue found in testing.** Naming a photograph that contains no recipe returns a junk title from the model (for example "Unable to determine - document contains abstract geometric shapes") instead of failing over to the name dialog. The fix is a one-line change to the naming prompt, shared with iOS, awaiting Chris's approval.
 
 ## Sequencing
 

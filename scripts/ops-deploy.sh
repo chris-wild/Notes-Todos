@@ -7,8 +7,10 @@
 #
 # RiderNav's worker-deploy.sh convention: the Cloudflare token lives in ~/keystores/cloudflare.env
 # (chmod 600) as CLOUDFLARE_API_TOKEN and is never printed. Secrets each deployed name needs
-# (npx wrangler secret put <NAME> --name <worker>): ANTHROPIC_API_KEY, and APP_APPLE_ID once the
-# App Store Connect app record exists. The STAGING worker may additionally set the plain var
+# (npx wrangler secret put <NAME> --name <worker>): ANTHROPIC_API_KEY, APP_APPLE_ID once the
+# App Store Connect app record exists, and GOOGLE_SERVICE_ACCOUNT_JSON (Play Developer API
+# service-account key; without it Android purchases answer 503 and the refund cron no-ops).
+# The STAGING worker may additionally set the plain var
 # TEST_MODE=1 (wrangler deploy --name hobpad-ops-staging --var TEST_MODE:1); production must not,
 # and this script proves the production copy refuses the test purchase shape after every deploy.
 #

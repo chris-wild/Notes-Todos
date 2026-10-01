@@ -52,7 +52,7 @@ import uk.co.promptbuilt.notestodos.data.db.TodoEntity
 fun TodosScreen() {
     val app = LocalContext.current.applicationContext as NotesTodosApp
     val viewModel: TodosViewModel = viewModel {
-        TodosViewModel(app.todosRepository, createSavedStateHandle())
+        TodosViewModel(app.todosRepository, createSavedStateHandle(), app.pendingTodoCategory)
     }
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
