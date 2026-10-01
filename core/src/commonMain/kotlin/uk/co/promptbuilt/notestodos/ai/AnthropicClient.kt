@@ -148,8 +148,10 @@ class AnthropicClient {
             put("max_tokens", 100)
             put(
                 "system",
+                // Kept identical to the Worker's TITLE_SYSTEM (backend/ops/src/index.js).
                 "You name recipes. Return ONLY JSON: {\"title\": \"...\"} — a short, " +
-                    "natural recipe name for the dish in the document. No prose.",
+                    "natural recipe name for the dish in the document. No prose. " +
+                    "If the document does not contain a recipe, return {\"title\": null}.",
             )
             put(
                 "messages",
@@ -193,9 +195,7 @@ class AnthropicClient {
             )
         }
         return try {
-            val out = "{" + complete(body, apiKey)
-            ((Json.parseToJsonElement(out).jsonObject["title"] as? JsonPrimitive)?.content)
-                ?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+            IngredientParsing.parseTitle("{" + complete(body, apiKey))
         } catch (e: AiUnauthorizedException) {
             throw e
         } catch (_: Exception) {

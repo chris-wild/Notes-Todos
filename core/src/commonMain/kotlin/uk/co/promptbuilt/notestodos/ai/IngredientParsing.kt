@@ -63,6 +63,17 @@ object IngredientParsing {
         return emptyList()
     }
 
+    /**
+     * The naming reply (with its "{" prefill restored): a short title, or null when there is none.
+     * The prompt answers {"title": null} for a page with no recipe; JSON null must never become
+     * the literal name "null", so only a non-empty JSON string counts as a title.
+     */
+    fun parseTitle(outText: String): String? {
+        val title = (tryParse(outText) ?: tryParse(extractBraces(outText)))?.get("title") as? JsonPrimitive
+        if (title == null || !title.isString) return null
+        return title.content.trim().take(80).takeIf { it.isNotEmpty() }
+    }
+
     private fun tryParse(text: String?): JsonObject? {
         if (text.isNullOrBlank()) return null
         return try {

@@ -43,9 +43,25 @@ const EXTRACT_TEXT_SYSTEM =
   "You extract recipe ingredient lists. Return ONLY JSON. " +
   'Return {"ingredients": ["..."]}. ' +
   "Keep quantities/units. Do not include method steps.";
+// Kept identical to AnthropicClient.extractRecipeTitle (the debug-build BYO path).
+// The null clause approved by Chris 2026-10-01.
 const TITLE_SYSTEM =
   'You name recipes. Return ONLY JSON: {"title": "..."} — a short, ' +
-  "natural recipe name for the dish in the document. No prose.";
+  "natural recipe name for the dish in the document. No prose. " +
+  'If the document does not contain a recipe, return {"title": null}.';
+
+/**
+ * True when a successful naming reply says the page holds no recipe ({"title": null} after
+ * the "{" prefill). The reply is at most 100 tokens, so parsing it is cheap.
+ */
+function titleIsNull(replyText) {
+  try {
+    const text = JSON.parse(replyText)?.content?.[0]?.text;
+    return typeof text === "string" && JSON.parse("{" + text).title === null;
+  } catch {
+    return false;
+  }
+}
 
 /** A Messages request around a PDF, spliced as strings — see the performance contract. */
 function pdfRequestBody(system, maxTokens, base64, userText) {
@@ -307,6 +323,9 @@ async function route(request, env, url, parts) {
     const pdf = await readPdfBody(request, env);
     if (pdf.error) return pdf.error;
     const reply = await relay(env, pdfRequestBody(TITLE_SYSTEM, 100, pdf.base64, "Name this recipe. Return JSON only."));
+    // "No recipe here" becomes an error status: every shipped client already treats a failed
+    // naming call as "type the name yourself", so none can ever save the word "null" as a name.
+    if (reply.ok && titleIsNull(reply.text)) return fail(422, "no_recipe");
     return passthrough(reply.status, reply.text);
   }
 

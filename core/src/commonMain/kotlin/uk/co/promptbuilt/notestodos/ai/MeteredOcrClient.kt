@@ -48,9 +48,7 @@ class MeteredOcrClient(
     override suspend fun extractRecipeTitle(pdfBytes: ByteArray): String? {
         return try {
             val reply = send("/v1/title", Base64.encode(pdfBytes))
-            val out = "{" + contentText(reply)
-            ((Json.parseToJsonElement(out).jsonObject["title"] as? JsonPrimitive)?.content)
-                ?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+            IngredientParsing.parseTitle("{" + contentText(reply))
         } catch (_: Exception) {
             null
         }

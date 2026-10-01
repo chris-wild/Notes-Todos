@@ -82,6 +82,30 @@ class IngredientParsingTest {
     }
 
     @Test
+    fun parsesATitle() {
+        assertEquals("Penne alla Carbonara", IngredientParsing.parseTitle("""{"title": " Penne alla Carbonara "}"""))
+    }
+
+    @Test
+    fun noRecipeTitleIsNullNotTheWordNull() {
+        // The prompt answers {"title": null} for a page with no recipe.
+        assertNull(IngredientParsing.parseTitle("""{"title": null}"""))
+    }
+
+    @Test
+    fun emptyMissingOrUnparseableTitlesAreNull() {
+        assertNull(IngredientParsing.parseTitle("""{"title": "  "}"""))
+        assertNull(IngredientParsing.parseTitle("""{"name": "Soup"}"""))
+        assertNull(IngredientParsing.parseTitle("""{"title": 42}"""))
+        assertNull(IngredientParsing.parseTitle("no json here"))
+    }
+
+    @Test
+    fun longTitlesAreCapped() {
+        assertEquals(80, IngredientParsing.parseTitle("""{"title": "${"x".repeat(200)}"}""")!!.length)
+    }
+
+    @Test
     fun headingLinesAreNotSplit() {
         val (name, qty) = IngredientParsing.splitQuantity("— Pancakes —")
         assertEquals("— Pancakes —", name)

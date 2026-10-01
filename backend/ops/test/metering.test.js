@@ -175,6 +175,23 @@ describe("free title calls", () => {
   });
 });
 
+describe("naming a page with no recipe", () => {
+  it("turns a null title into a 422 the clients treat as naming failed", async () => {
+    const token = crypto.randomUUID();
+    mockAnthropic(200, '{"content":[{"type":"text","text":" \\"title\\": null}"}]}');
+    const reply = await call("/v1/title", { token, body: b64(pdfWithPages(1)) });
+    expect(reply.status).toBe(422);
+  });
+
+  it("still relays a real title unchanged", async () => {
+    const token = crypto.randomUUID();
+    mockAnthropic(200, '{"content":[{"type":"text","text":"\\"title\\": \\"Flapjacks\\"}"}]}');
+    const reply = await call("/v1/title", { token, body: b64(pdfWithPages(1)) });
+    expect(reply.status).toBe(200);
+    expect(await reply.text()).toContain("Flapjacks");
+  });
+});
+
 describe("unit conversion preference", () => {
   it("injects the approved conversion clause only when units= is given", async () => {
     const token = crypto.randomUUID();
