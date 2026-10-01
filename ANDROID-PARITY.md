@@ -131,7 +131,15 @@ External setup is required before an end-to-end test. A Google Cloud project wit
 
 The account identifier must also survive a restore, which Phase 2's identity work covers.
 
-**Implementation status, 1 October 2026.** Built on the local branch `android-drive-backup` in `app/src/main/java/uk/co/promptbuilt/notestodos/backup/` (`DriveBackup`, `DriveAppDataClient`, `DrivePdfSyncPlan`, `DriveSyncWorker`) with the Settings section in `ui/recipes/DriveBackupSection.kt`. The sync rules have ten unit tests, including one proving that a fresh install never deletes the backup. Verified on the emulator: the Settings section, the hand-off to Google's consent flow, and cancelling it. Not yet verified: a real upload and restore, which needs the Google Cloud registration described above.
+**Implementation status, 1 October 2026. Built and verified end to end.** The code is in `app/src/main/java/uk/co/promptbuilt/notestodos/backup/` (`DriveBackup`, `DriveAppDataClient`, `DrivePdfSyncPlan`, `DriveSyncWorker`) with the Settings section in `ui/recipes/DriveBackupSection.kt`. The sync rules have ten unit tests, including one proving that a fresh install never deletes the backup. The Google Cloud project `hobpad` has the Drive API enabled, a consent screen in testing mode with Chris as the only test user, and an Android OAuth client for the debug signing certificate.
+
+Verified on Chris's OnePlus against his real data. The first pass backed up all 63 recipe PDFs. Two PDFs deleted behind the app's back were restored at the next launch with identical checksums. A newly saved recipe's PDF was uploaded within about 25 seconds, and deleting that recipe in the app removed its Drive copy within about 20 seconds. Testing found and fixed one bug: a PDF is stored when it is picked but only becomes worth keeping when the recipe is saved, so the backup now also runs whenever the set of attachments changes.
+
+**Before launch.** Three items remain.
+
+1. Add the hobpad.app home page and privacy policy to the consent screen's branding (Google's screen currently notes that it has no privacy policy link), then publish the consent screen from testing to production. While it is in testing mode, Google expires each grant after seven days, so the app will ask for access again weekly.
+2. Register a release OAuth client with the upload key and Play app signing certificate fingerprints, and with the final application ID from decision D1.
+3. Update `site/privacy.html` to describe the Drive backup.
 
 Size: medium.
 

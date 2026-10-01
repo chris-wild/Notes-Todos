@@ -12,7 +12,13 @@ import com.google.android.gms.tasks.Task
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -71,8 +77,20 @@ class DriveBackup(
         .setRequestedScopes(listOf(Scope(DRIVE_APPDATA)))
         .build()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     /** Called at app start: resume the schedule and catch up (including any pending restore). */
     fun onAppStart() {
+        // A picked PDF is written before its recipe is saved, so the write alone cannot
+        // trigger the upload: the file only becomes worth keeping once an attachment row
+        // references it. Every change to the set of attachments therefore requests a pass.
+        scope.launch {
+            recipes().observeAttachments()
+                .map { rows -> rows.map { it.fileName }.toSet() }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { requestSync() }
+        }
         if (!prefs.getBoolean(KEY_ENABLED, false)) return
         schedulePeriodic()
         requestSync(delaySeconds = 0)
