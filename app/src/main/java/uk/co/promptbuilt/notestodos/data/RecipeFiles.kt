@@ -18,15 +18,26 @@ import kotlinx.coroutines.withContext
  * are normalised on-device into a single-page PDF so the viewer only ever deals
  * with PDFs, matching the server behavior.
  */
-class RecipeFiles(private val context: Context) : RecipeStore {
+class RecipeFiles(
+    private val context: Context,
+    /** Every deletion passes through here so the Drive backup copy can follow (DriveBackup). */
+    private val onDeleted: (String) -> Unit = {},
+    private val onChanged: () -> Unit = {},
+) : RecipeStore {
 
     private val dir: File
         get() = File(context.filesDir, "recipes").apply { mkdirs() }
 
     fun fileFor(fileName: String): File = File(dir, fileName)
 
+    /** Stored PDFs by name and size; partial downloads (.part) are not PDFs yet. */
+    fun listLocal(): Map<String, Long> =
+        dir.listFiles { f -> f.isFile && f.name.endsWith(".pdf") }
+            ?.associate { it.name to it.length() }
+            .orEmpty()
+
     fun deleteIfPresent(fileName: String?) {
-        if (!fileName.isNullOrBlank()) fileFor(fileName).delete()
+        if (!fileName.isNullOrBlank()) delete(fileName)
     }
 
     override fun read(fileName: String): ByteArray? =
@@ -34,14 +45,21 @@ class RecipeFiles(private val context: Context) : RecipeStore {
 
     override fun write(fileName: String, bytes: ByteArray) {
         fileFor(fileName).writeBytes(bytes)
+        onChanged()
     }
 
     override fun delete(fileName: String) {
-        fileFor(fileName).delete()
+        if (fileFor(fileName).delete()) {
+            onDeleted(fileName)
+            onChanged()
+        }
     }
 
     override fun clearAll() {
-        dir.listFiles()?.forEach { it.delete() }
+        dir.listFiles()?.forEach { file ->
+            if (file.delete() && file.name.endsWith(".pdf")) onDeleted(file.name)
+        }
+        onChanged()
     }
 
     data class Imported(val fileName: String, val originalName: String)
@@ -65,6 +83,7 @@ class RecipeFiles(private val context: Context) : RecipeStore {
             target.delete()
             throw e
         }
+        onChanged()
         Imported(fileName, originalName)
     }
 

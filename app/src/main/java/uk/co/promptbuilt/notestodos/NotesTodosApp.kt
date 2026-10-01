@@ -5,6 +5,7 @@ import uk.co.promptbuilt.notestodos.ai.AnthropicClient
 import uk.co.promptbuilt.notestodos.ai.ByoOcrService
 import uk.co.promptbuilt.notestodos.ai.IngredientTodosUseCase
 import uk.co.promptbuilt.notestodos.backup.BackupManager
+import uk.co.promptbuilt.notestodos.backup.DriveBackup
 import uk.co.promptbuilt.notestodos.backup.SafBackup
 import uk.co.promptbuilt.notestodos.data.AndroidSecretStore
 import uk.co.promptbuilt.notestodos.data.NotesRepository
@@ -29,7 +30,10 @@ class NotesTodosApp : Application() {
     }
     val settingsRepository by lazy { SettingsRepository(createSettingsDataStore(this)) }
 
-    val recipeFiles by lazy { RecipeFiles(this) }
+    val recipeFiles: RecipeFiles by lazy {
+        RecipeFiles(this, onDeleted = { driveBackup.recordDeletion(it) }, onChanged = { driveBackup.requestSync() })
+    }
+    val driveBackup: DriveBackup by lazy { DriveBackup(this, { recipeFiles }, { recipesRepository }) }
     val secureKeys by lazy { SecureKeys(AndroidSecretStore(this)) }
     val anthropicClient by lazy { AnthropicClient() }
     // Android stays on the bring-your-own-key path (metered packs are iOS-only for now).
@@ -37,4 +41,9 @@ class NotesTodosApp : Application() {
         IngredientTodosUseCase(recipesRepository, todosRepository, recipeFiles, ByoOcrService(anthropicClient, secureKeys))
     }
     val safBackup by lazy { SafBackup(this, BackupManager(database, recipeFiles)) }
+
+    override fun onCreate() {
+        super.onCreate()
+        driveBackup.onAppStart()
+    }
 }

@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +55,7 @@ import java.io.File
 import java.text.DateFormat
 import java.util.Date
 import uk.co.promptbuilt.notestodos.NotesTodosApp
+import uk.co.promptbuilt.notestodos.backup.DriveBackup
 import uk.co.promptbuilt.notestodos.data.RecipeFiles
 import uk.co.promptbuilt.notestodos.data.db.RecipeAttachmentEntity
 import uk.co.promptbuilt.notestodos.data.db.RecipeEntity
@@ -271,6 +274,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
         SettingsDialog(
             hasKey = state.ingredientAutomation,
             viewModel = viewModel,
+            driveBackup = app.driveBackup,
             onClose = { settingsOpen = false },
         )
     }
@@ -539,6 +543,7 @@ private fun RecipeViewerDialog(
 private fun SettingsDialog(
     hasKey: Boolean,
     viewModel: RecipesViewModel,
+    driveBackup: DriveBackup,
     onClose: () -> Unit,
 ) {
     var keyDraft by remember { mutableStateOf("") }
@@ -557,7 +562,7 @@ private fun SettingsDialog(
         onDismissRequest = onClose,
         title = { Text("Settings") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text("Anthropic API key", style = MaterialTheme.typography.titleSmall)
                 Text(
                     text = if (hasKey) {
@@ -606,6 +611,10 @@ private fun SettingsDialog(
                         importLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
                     }) { Text("Import backup") }
                 }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                DriveBackupSection(driveBackup)
             }
         },
         confirmButton = {

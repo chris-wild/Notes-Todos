@@ -60,5 +60,10 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
 
+    // Recipe PDF backup to the Google Drive application data folder (backup/DriveBackup.kt).
+    implementation(libs.play.services.auth)
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.okhttp)
+
     testImplementation(libs.junit)
 }
