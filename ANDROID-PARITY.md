@@ -59,7 +59,7 @@ Sizes are relative and ESTIMATED, not measured. They indicate order of magnitude
 Some Google Play steps take calendar time regardless of engineering effort, so they should begin before any code is written.
 
 1. **Answered 1 October 2026.** A Google Play developer account exists. It is the personal account registered for RiderNav (`/Volumes/DATA/Projects/RiderNav/ridernav/GOOGLE_DEPLOYMENT_CHECKLIST.md`).
-2. **Applies.** Because it is a personal account created after 13 November 2023, Google requires a closed test with at least 12 testers, opted in for 14 continuous days, before production access can be requested. Only closed testing counts; internal testing does not. Recruiting testers is therefore the critical path for the whole launch. RiderNav's existing beta group (ridernav-testers@googlegroups.com) could double as HobPad's testers.
+2. **Applies.** Because it is a personal account created after 13 November 2023, Google requires a closed test with at least 12 testers, opted in for 14 continuous days, before production access can be requested. Only closed testing counts; internal testing does not. Recruiting testers is therefore the critical path for the whole launch. **On hold (1 October 2026):** Chris will recruit a new group of testers for HobPad rather than reuse RiderNav's, so the closed test is not to be set up until he provides them.
 3. Set up a Google payments merchant profile, which selling credit packs requires.
 4. Create the Play Console app record under the ID chosen in D1.
 5. Create a Google Cloud service account with Play Developer API access, which the Worker needs to verify purchases.
