@@ -40,7 +40,7 @@ Android builds against SDK 36 (minimum 26). The application ID is `uk.co.promptb
 
 Each decision carries a recommendation. None of them should be settled by the implementer alone.
 
-**D1. Application ID.** The Android ID is still `uk.co.promptbuilt.notestodos`, while iOS uses `uk.co.promptbuilt.hobpad`. Once an app is published on Google Play its ID can never change. Changing it now means the installed copy on the OnePlus becomes a separate app, but the zip backup provides a proven migration path. The recommendation is to adopt `uk.co.promptbuilt.hobpad` before the first Play upload and migrate the existing data with a zip export and import.
+**D1. Application ID. Decided and done 1 October 2026.** The Android application ID is now `uk.co.promptbuilt.hobpad`, matching iOS (version 0.3.0, version code 3). The code namespace stays `uk.co.promptbuilt.notestodos`. The camera's FileProvider authority now derives from the application ID, because a hardcoded authority would have blocked installing the new app beside the old one. The OnePlus was migrated by copying the old app's data into the new one, verified identical (every record count, a hash of all note contents, and all 63 PDF checksums), and the old app was then uninstalled. The Anthropic key could not be carried over, since it was encrypted with a key belonging to the old app, so it must be re-entered.
 
 **D2. Bring-your-own key in release builds.** On iOS the personal-key path exists only in Debug builds. The recommendation is the same for Android. Release builds meter through the Worker, and the key field becomes a debug-only developer tool.
 
@@ -138,15 +138,15 @@ Verified on Chris's OnePlus against his real data. The first pass backed up all 
 **Before launch.** Status as of 1 October 2026.
 
 1. **Done.** The consent screen's branding carries the hobpad.app home page, the privacy policy link and the authorised domain `hobpad.app`, with no logo so that Google verification is not required. The consent screen is published in production.
-2. **Partly done.** A HobPad upload key now exists at `~/keystores/hobpad-upload.jks` (SHA-1 `3A:27:85:15:A6:68:C7:24:A8:6A:59:FC:12:14:5B:0C:B2:7D:5A:8B`), its credentials are in `~/.gradle/gradle.properties` under `HOBPAD_UPLOAD_*`, release builds sign with it, and it is registered with Google for the current application ID. Still needed: a registration for the Play app signing certificate, which only exists once the app is created in Play Console, and both registrations repeated under the final application ID if decision D1 changes it.
+2. **Done.** A HobPad upload key exists at `~/keystores/hobpad-upload.jks` (SHA-1 `3A:27:85:15:A6:68:C7:24:A8:6A:59:FC:12:14:5B:0C:B2:7D:5A:8B`), its credentials are in `~/.gradle/gradle.properties` under `HOBPAD_UPLOAD_*`, and release builds sign with it. HobPad exists in Play Console under `uk.co.promptbuilt.hobpad`, with a first bundle (version code 3) saved as an unreleased internal testing draft, which caused Google to generate the Play app signing key (SHA-1 `2E:BA:76:CC:AB:56:09:86:0A:F6:B3:B4:3D:27:E0:E0:89:A2:BC:D0`). Google Cloud holds Android OAuth clients for `uk.co.promptbuilt.hobpad` with the debug key, the upload key and the Play app signing key. The two clients for the retired `uk.co.promptbuilt.notestodos` ID are now unused and can be deleted.
 3. **Done.** `site/privacy.html` describes recipe file backup on Android, including the Google API Services User Data Policy statement, and `site/support.html` answers the backup question for Android as well as iOS.
 
 Size: medium.
 
 ### Phase 5. Google Play launch
 
-1. Adopt the application ID chosen in D1 and migrate the OnePlus data.
-2. Configure Play App Signing and an upload key, and build a release bundle with `bundleRelease`.
+1. **Done.** The application ID chosen in D1 is adopted and the OnePlus data migrated.
+2. **Done.** Play App Signing is active and release bundles are built with `bundleRelease`, signed with the upload key.
 3. Create the three products in Play Console with the agreed prices.
 4. Complete the Data safety form, the content rating questionnaire and the target audience declaration.
 5. Adapt the approved App Store description and keywords for the Play listing, and produce phone screenshots from the same clean fixture data used for iOS.

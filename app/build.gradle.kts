@@ -11,13 +11,14 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        // Deliberately unchanged after the HobPad rename: changing the id would
-        // orphan existing installs' data.
-        applicationId = "uk.co.promptbuilt.notestodos"
+        // Matches the iOS bundle ID (decision D1 in ANDROID-PARITY.md, 1 October 2026). The code
+        // namespace stays uk.co.promptbuilt.notestodos; only the store identity changed. Installs of
+        // the old ID were migrated by copying their data (zip backup works too).
+        applicationId = "uk.co.promptbuilt.hobpad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // Play upload key, configured in ~/.gradle/gradle.properties (never in the repo), as RiderNav does

@@ -19,7 +19,7 @@
         <!-- Grants the camera app a place to write the captured recipe photo. -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="uk.co.promptbuilt.notestodos.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

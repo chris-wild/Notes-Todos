@@ -98,7 +98,7 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
         val dir = File(context.cacheDir, "captures").apply { mkdirs() }
         val uri = FileProvider.getUriForFile(
             context,
-            "uk.co.promptbuilt.notestodos.fileprovider",
+            "${context.packageName}.fileprovider",
             File(dir, "recipe-capture.jpg"),
         )
         captureUri = uri
