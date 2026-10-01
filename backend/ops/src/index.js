@@ -201,7 +201,8 @@ async function route(request, env, url, parts) {
   if (ensured.limited) return fail(429, "slow_down");
 
   if (endpoint === "balance" && method === "GET") {
-    return json(200, { balance: ensured.balance });
+    // purchased lets the client mirror the naming-cap exemption rule locally.
+    return json(200, { balance: ensured.balance, purchased: await account.hasPurchased() });
   }
 
   if (endpoint === "extract" && method === "POST") {
@@ -244,7 +245,11 @@ async function route(request, env, url, parts) {
   }
 
   if (endpoint === "title" && method === "POST") {
-    if (!(await account.titleAllowed(Number(env.TITLE_DAILY_LIMIT || 20)))) return fail(429, "slow_down");
+    // Paying customers skip the free naming cap while their purchased credits last —
+    // their packs fund the title calls. The paid ceiling only guards a leaked token.
+    const paid = ensured.balance > 0 && (await account.hasPurchased());
+    const limit = Number(paid ? env.PAID_TITLE_DAILY_LIMIT || 500 : env.TITLE_DAILY_LIMIT || 30);
+    if (!(await account.titleAllowed(limit))) return fail(429, "slow_down");
     const pdf = await readPdfBody(request, env);
     if (pdf.error) return pdf.error;
     const reply = await relay(env, pdfRequestBody(TITLE_SYSTEM, 100, pdf.base64, "Name this recipe. Return JSON only."));

@@ -19,13 +19,18 @@ enum OpsWorkerAPI {
         var errorDescription: String? { "Credits service answered \(status): \(body)" }
     }
 
-    private struct BalanceReply: Decodable { let balance: Int }
+    struct BalanceReply: Decodable {
+        let balance: Int
+        /// Whether the account has ever bought a pack — with balance, this mirrors the
+        /// Worker's naming-cap exemption (purchased accounts name freely while credits last).
+        let purchased: Bool?
+    }
     private struct PurchaseReply: Decodable { let balance: Int }
 
-    static func balance(token: UUID) async throws -> Int {
+    static func balance(token: UUID) async throws -> BalanceReply {
         var request = URLRequest(url: baseURL.appending(path: "v1/balance"))
         request.setValue("Bearer \(token.uuidString.lowercased())", forHTTPHeaderField: "Authorization")
-        return try await send(request, as: BalanceReply.self).balance
+        return try await send(request, as: BalanceReply.self)
     }
 
     /// Submit a signed transaction; the Worker verifies Apple's signature and credits the

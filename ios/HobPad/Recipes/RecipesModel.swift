@@ -41,6 +41,10 @@ final class RecipesModel {
     }
 
     private func autoNameAllowed() -> Bool {
+        // Paying customers name freely while their purchased credits last — the packs
+        // fund the title calls (the Worker applies the same rule server-side); an
+        // emptied pack reverts to the free daily cap until the next top-up.
+        if ops.purchased && (ops.balance ?? 0) > 0 { return true }
         let d = UserDefaults.standard
         if d.string(forKey: "autoNameDay") != Self.dayStamp() { return true }
         return d.integer(forKey: "autoNameCount") < Self.autoNameDailyLimit

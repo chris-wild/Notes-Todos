@@ -141,7 +141,7 @@ private struct RecipesContent: View {
                 Button("Cancel", role: .cancel) { manualName = "" }
             } message: { pending in
                 Text(pending.reason == .dailyLimit
-                     ? "HobPad has named 30 photographs today, so automatic naming is resting until tomorrow. The photo is saved. Type a name for this recipe."
+                     ? "HobPad has named 30 photographs today, so automatic naming is resting until tomorrow. The photo is saved. Type a name for this recipe. There is no daily limit while you have purchased credits."
                      : "The photo is saved, but automatic naming did not work this time. Type a name for this recipe.")
             }
             // An alert, not a confirmationDialog: iOS 26 renders dialogs without the

@@ -37,3 +37,4 @@ PRODUCT_CREDITS = '{"uk.co.promptbuilt.hobpad.ops50":50,"uk.co.promptbuilt.hobpa
 FREE_OPS = "5"
 MAX_PDF_BYTES = "15728640"
 TITLE_DAILY_LIMIT = "30"
+PAID_TITLE_DAILY_LIMIT = "500"

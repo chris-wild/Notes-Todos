@@ -76,7 +76,20 @@ export class OpsAccount extends DurableObject {
     const balance = (await this.ctx.storage.get("balance")) + ops;
     await this.ctx.storage.put("balance", balance);
     await this.ctx.storage.put(`txn:${txnId}`, { ops, ...detail, refunded: false, at: Date.now() });
+    await this.ctx.storage.put("purchased", true);
     return { balance, credited: ops, duplicate: false };
+  }
+
+  /**
+   * Whether this account has ever bought a pack. The flag is written by credit();
+   * accounts credited before the flag existed are migrated by the txn: scan.
+   */
+  async hasPurchased() {
+    if (await this.ctx.storage.get("purchased")) return true;
+    const txns = await this.ctx.storage.list({ prefix: "txn:", limit: 1 });
+    if (txns.size === 0) return false;
+    await this.ctx.storage.put("purchased", true);
+    return true;
   }
 
   /**

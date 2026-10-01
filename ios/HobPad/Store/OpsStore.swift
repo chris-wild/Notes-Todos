@@ -25,6 +25,9 @@ final class OpsStore {
     private(set) var products: [Product] = []
     private(set) var productsLoaded = false
     private(set) var balance: Int?
+    /// The account has bought a pack at some point; with balance > 0 this lifts the
+    /// daily auto-naming cap (RecipesModel mirrors the Worker's exemption rule).
+    private(set) var purchased = false
     private(set) var purchasing = false
     var message: String?
 
@@ -66,7 +69,9 @@ final class OpsStore {
 
     func refreshBalance() async {
         do {
-            balance = try await OpsWorkerAPI.balance(token: OpsAccount.token())
+            let reply = try await OpsWorkerAPI.balance(token: OpsAccount.token())
+            balance = reply.balance
+            purchased = reply.purchased ?? purchased
         } catch {
             // Offline is normal; keep the last known balance rather than alarming anyone.
         }
@@ -117,6 +122,7 @@ final class OpsStore {
             #endif
             await transaction.finish()
             balance = newBalance
+            purchased = true
             message = nil
         } catch {
             // Deliberately NOT finished: Transaction.unfinished re-delivers on next launch,
