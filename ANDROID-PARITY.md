@@ -176,7 +176,7 @@ Chris asked for full iOS parity, including the web service and the retirement of
 2. **Service account for purchase verification.** A Google Cloud service account with the Google Play Android Developer API enabled, a JSON key stored as the Worker secret `GOOGLE_SERVICE_ACCOUNT_JSON` on both Workers, and an invitation in Play Console with "View financial data, orders, and cancellation survey responses" and "Manage orders and subscriptions".
 3. **Products and a real purchase test.** Once the merchant account exists, the three one-time products are created with the same IDs and prices, and a licence-tester purchase is verified end to end on an internal testing build.
 
-**Known issue found in testing.** Naming a photograph that contains no recipe returns a junk title from the model (for example "Unable to determine - document contains abstract geometric shapes") instead of failing over to the name dialog. The fix is a one-line change to the naming prompt, shared with iOS, awaiting Chris's approval.
+**Fixed: titles for pages with no recipe.** Naming a photograph that contains no recipe used to return a junk title from the model (for example "Unable to determine - document contains abstract geometric shapes"). With Chris's approval (1 October 2026), the naming prompt now returns a null title for such pages, and the Worker answers 422 `no_recipe`, so every client, including the shipped iOS build, shows the name dialog instead. This is committed (dd7122c) and live on the staging Worker. It reaches production with the next production Worker deploy, which waits for iOS 1.0.1 to clear App Review. A page with some text but no recipe can still be named from that text, which is acceptable.
 
 ## Sequencing
 
