@@ -30,6 +30,7 @@ private struct RecipesContent: View {
     @State private var cameraOpen = false
     @State private var cameraFallbackItem: PhotosPickerItem?
     @State private var manualName = ""
+    @State private var creditsOpen = false
 
     var body: some View {
         NavigationStack {
@@ -138,11 +139,20 @@ private struct RecipesContent: View {
                     model.rename(recipeId: pending.recipeId, to: manualName)
                     manualName = ""
                 }
+                if pending.reason == .dailyLimit {
+                    Button("Buy credits") {
+                        manualName = ""
+                        creditsOpen = true
+                    }
+                }
                 Button("Cancel", role: .cancel) { manualName = "" }
             } message: { pending in
                 Text(pending.reason == .dailyLimit
-                     ? "HobPad has named 30 photographs today, so automatic naming is resting until tomorrow. The photo is saved. Type a name for this recipe. There is no daily limit while you have purchased credits."
+                     ? "Automatic naming has reached today's limit of 30. The photo is saved. Type a name now, cancel and rename it later, or buy a credit pack. There is no daily limit while you have purchased credits."
                      : "The photo is saved, but automatic naming did not work this time. Type a name for this recipe.")
+            }
+            .sheet(isPresented: $creditsOpen) {
+                PaywallSheet(ops: model.ops)
             }
             // An alert, not a confirmationDialog: iOS 26 renders dialogs without the
             // automatic Cancel button they used to get (Chris's report, Sept 30).
