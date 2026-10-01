@@ -52,13 +52,13 @@ function pdfRequestBody(system, maxTokens, base64, userText) {
   );
 }
 
-function textRequestBody(recipeName, text) {
+function textRequestBody(recipeName, unitsClause, text) {
   return JSON.stringify({
     model: MODEL,
     max_tokens: 2048,
     system: EXTRACT_TEXT_SYSTEM,
     messages: [
-      { role: "user", content: `Recipe name: ${recipeName}.\n\nText to extract from:\n${text}` },
+      { role: "user", content: `Recipe name: ${recipeName}.${unitsClause}\n\nText to extract from:\n${text}` },
       { role: "assistant", content: "{" },
     ],
   });
@@ -136,6 +136,23 @@ async function readPdfBody(request, env) {
 
 function recipeName(url) {
   return (url.searchParams.get("name") || "Recipe").slice(0, 200);
+}
+
+// The user's preferred unit system, carried as ?units= by the client (Settings -> Units).
+// Wording approved by Chris 2026-10-01; MeteredOcrClient.kt documents the parameter and
+// AnthropicClient.kt (BYO path) carries the same clause — keep the three in step.
+const UNITS_TARGETS = {
+  metric: "metric units (grams, millilitres)",
+  us: "US customary units (ounces, pounds, cups, fluid ounces)",
+};
+
+function unitsClause(url) {
+  const target = UNITS_TARGETS[url.searchParams.get("units")];
+  if (!target) return "";
+  return (
+    ` Convert every quantity to ${target}; use weight for dry-volume measures such as cups` +
+    " and sticks, applying standard culinary densities, and round to practical shopping amounts."
+  );
 }
 
 // ---- routing ------------------------------------------------------------------------------
@@ -221,7 +238,7 @@ async function route(request, env, url, parts) {
     }
     const reply = await relay(
       env,
-      pdfRequestBody(EXTRACT_PDF_SYSTEM, 2048, pdf.base64, `Extract the ingredient list(s) for: ${recipeName(url)}. Return JSON only.`),
+      pdfRequestBody(EXTRACT_PDF_SYSTEM, 2048, pdf.base64, `Extract the ingredient list(s) for: ${recipeName(url)}.${unitsClause(url)} Return JSON only.`),
     );
     await account.settle(opId, reply.ok);
     return passthrough(reply.status, reply.text);
@@ -239,7 +256,7 @@ async function route(request, env, url, parts) {
         balance: reserved.balance,
       });
     }
-    const reply = await relay(env, textRequestBody(recipeName(url), text));
+    const reply = await relay(env, textRequestBody(recipeName(url), unitsClause(url), text));
     await account.settle(opId, reply.ok);
     return passthrough(reply.status, reply.text);
   }

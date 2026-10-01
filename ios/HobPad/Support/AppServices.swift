@@ -29,8 +29,27 @@ final class AppServices {
                 workerBaseUrl: OpsWorkerAPI.baseURL.absoluteString,
                 opsToken: OpsAccount.token().uuidString.lowercased(),
                 allowByoKey: allowByoKey,
+                // @Sendable is load-bearing: a plain closure formed in this MainActor init
+                // inherits MainActor isolation, and the Kotlin OCR client invokes it on a
+                // background coroutine — libdispatch then kills the app at the first
+                // conversion ("Block was expected to execute on queue main-thread").
+                unitsProvider: { @Sendable in UnitsPreference.resolved() },
             ),
         )
         ops = OpsStore()
+    }
+}
+
+/// The unit system extraction converts to: the Settings choice, or the device region when
+/// set to Automatic (the UK measures cooking in metric). Deliberately NOT on AppServices:
+/// the Kotlin OCR client calls this from a background coroutine, and a MainActor-isolated
+/// function invoked off the main thread traps under Swift 6 (crashed the first convert).
+enum UnitsPreference {
+    static func resolved() -> String {
+        switch UserDefaults.standard.string(forKey: "preferredUnits") {
+        case "metric": return "metric"
+        case "us": return "us"
+        default: return Locale.current.measurementSystem == .us ? "us" : "metric"
+        }
     }
 }

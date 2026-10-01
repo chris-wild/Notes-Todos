@@ -6,6 +6,7 @@ struct SettingsSheet: View {
     @Bindable var model: RecipesModel
 
     @State private var keyDraft = ""
+    @AppStorage("preferredUnits") private var preferredUnits = "auto"
     @State private var exportDocument: BackupDocument?
     @State private var importOpen = false
     @State private var confirmImportData: Data?
@@ -27,6 +28,19 @@ struct SettingsSheet: View {
                     Button("Buy credits") { paywallOpen = true }
                 } header: {
                     Text("Recipe conversions")
+                }
+
+                Section {
+                    Picker("Units", selection: $preferredUnits) {
+                        Text("Automatic").tag("auto")
+                        Text("Metric (g, ml)").tag("metric")
+                        Text("US (oz, cups)").tag("us")
+                    }
+                    Text("Ingredient lists are converted to these units, whatever the recipe uses. Automatic follows your device region.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Units")
                 }
 
                 #if DEBUG

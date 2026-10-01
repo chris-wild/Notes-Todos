@@ -29,6 +29,9 @@ class MeteredConfig(
     val workerBaseUrl: String,
     val opsToken: String,
     val allowByoKey: Boolean,
+    /** Preferred unit system for extracted quantities ("metric" / "us"), read per call so a
+     *  Settings change applies immediately; the Worker injects the conversion prompt. */
+    val unitsProvider: () -> String? = { null },
 )
 
 /**
@@ -48,7 +51,7 @@ class CoreServices(secretStore: SecretStore, metered: MeteredConfig) {
     val secureKeys = SecureKeys(secretStore)
     val anthropicClient = AnthropicClient()
     private val byoOcr = ByoOcrService(anthropicClient, secureKeys)
-    private val meteredOcr = MeteredOcrClient(metered.workerBaseUrl) { metered.opsToken }
+    private val meteredOcr = MeteredOcrClient(metered.workerBaseUrl, { metered.opsToken }, metered.unitsProvider)
     val ocrService: OcrService = SwitchingOcrService {
         if (metered.allowByoKey && secureKeys.getAnthropicKey() != null) byoOcr else meteredOcr
     }

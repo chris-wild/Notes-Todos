@@ -20,6 +20,7 @@ const anthropicOk = JSON.stringify({ content: [{ type: "text", text: '"ingredien
 // global fetch intercepts its Anthropic upstream; SELF.fetch rides a binding and is untouched.
 const realFetch = globalThis.fetch;
 const upstreamQueue = [];
+const upstreamBodies = [];
 function mockAnthropic(status, body, times = 1) {
   for (let i = 0; i < times; i++) upstreamQueue.push({ status, body });
 }
@@ -37,6 +38,7 @@ beforeAll(() => {
     if (!url.startsWith("https://api.anthropic.com/")) return realFetch(input, init);
     const next = upstreamQueue.shift();
     if (!next) throw new Error(`unexpected upstream call to ${url}`);
+    upstreamBodies.push(typeof init?.body === "string" ? init.body : String(init?.body ?? ""));
     return new Response(next.body, { status: next.status, headers: { "content-type": "application/json" } });
   };
 });
@@ -170,6 +172,24 @@ describe("free title calls", () => {
       expect((await call("/v1/title", { token, body: b64(pdfWithPages(1)) })).status).toBe(200);
     }
     expect((await call("/v1/title", { token, body: b64(pdfWithPages(1)) })).status).toBe(429);
+  });
+});
+
+describe("unit conversion preference", () => {
+  it("injects the approved conversion clause only when units= is given", async () => {
+    const token = crypto.randomUUID();
+    mockAnthropic(200, anthropicOk, 2);
+    await call("/v1/extract-text?name=Soup&units=metric", { token, body: "1 cup flour" });
+    expect(upstreamBodies.at(-1)).toContain("Convert every quantity to metric units (grams, millilitres)");
+    await call("/v1/extract-text?name=Soup", { token, body: "1 cup flour" });
+    expect(upstreamBodies.at(-1)).not.toContain("Convert every quantity");
+  });
+
+  it("ignores unknown unit systems", async () => {
+    const token = crypto.randomUUID();
+    mockAnthropic(200, anthropicOk);
+    await call("/v1/extract-text?name=Soup&units=cubits", { token, body: "1 cup flour" });
+    expect(upstreamBodies.at(-1)).not.toContain("Convert every quantity");
   });
 });
 

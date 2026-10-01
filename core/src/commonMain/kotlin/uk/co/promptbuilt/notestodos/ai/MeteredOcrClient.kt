@@ -24,16 +24,23 @@ class InsufficientOpsException(val needed: Int, val balance: Int) :
 class MeteredOcrClient(
     private val baseUrl: String,
     private val tokenProvider: () -> String,
+    /** "metric" / "us" (or null for no conversion): rides as ?units= and the Worker adds
+     *  the conversion clause (backend/ops/src/index.js unitsClause — keep in step). */
+    private val unitsProvider: () -> String? = { null },
 ) : OcrService {
+
+    private fun unitsParam(): String =
+        unitsProvider()?.let { "&units=${percentEncode(it)}" } ?: ""
+
 
     @OptIn(ExperimentalEncodingApi::class)
     override suspend fun extractIngredientsFromPdf(pdfBytes: ByteArray, recipeName: String): List<String> {
-        val reply = send("/v1/extract?name=${percentEncode(recipeName)}", Base64.encode(pdfBytes))
+        val reply = send("/v1/extract?name=${percentEncode(recipeName)}${unitsParam()}", Base64.encode(pdfBytes))
         return IngredientParsing.parseResponse("{" + contentText(reply))
     }
 
     override suspend fun extractIngredientsFromText(text: String, recipeName: String): List<String> {
-        val reply = send("/v1/extract-text?name=${percentEncode(recipeName)}", text)
+        val reply = send("/v1/extract-text?name=${percentEncode(recipeName)}${unitsParam()}", text)
         return IngredientParsing.parseResponse("{" + contentText(reply))
     }
 
