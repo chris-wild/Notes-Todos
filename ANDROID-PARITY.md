@@ -29,9 +29,10 @@ Every row below was checked against the source on 1 October 2026. File reference
 | Delete a recipe from the open recipe | Yes, with Cancel | Absent. Delete only from the list row | `RecipesScreen.kt:450` |
 | Tappable links in recipe notes | Yes | Partial. Links work on note cards only | `APP/ui/common/LinkifiedText.kt`, `RecipesScreen.kt:510-517` |
 | Compact photo PDFs | 2200 pixel JPEG at quality 0.6 | Unknown size. Bitmap up to 4000 pixels drawn into `PdfDocument` | `APP/data/RecipeFiles.kt:76-102` |
-| Full backup | iCloud device backup | Manual zip only. Auto Backup excludes recipe PDFs | `res/xml/data_extraction_rules.xml` |
+| Full backup | iCloud device backup | Auto Backup covers the database. Recipe PDFs only by manual zip or phone-to-phone transfer | `res/xml/data_extraction_rules.xml` |
 | Tab order Recipes, Todos, Notes | Yes | Present | `APP/ui/AppScaffold.kt:33-37` |
 | Two-pane layout on large screens | Yes (iPad) | Absent | No window size class or adaptive code |
+| Light theme following the system | Yes | Absent. Dark-only by design | `APP/ui/theme/Theme.kt` |
 
 Android builds against SDK 36 (minimum 26). The application ID is `uk.co.promptbuilt.notestodos` and the version is 0.2.0 (`app/build.gradle.kts:11-20`).
 
@@ -47,7 +48,7 @@ Each decision carries a recommendation. None of them should be settled by the im
 
 **D4. Product identifiers and prices.** Google Play product IDs may contain lowercase letters, digits, periods and underscores, so the iOS identifiers (`uk.co.promptbuilt.hobpad.ops50` and so on) are valid on Play. Reusing them keeps a single credit map on the Worker. The recommendation is to reuse the identifiers and the £1.99, £2.99 and £9.99 prices.
 
-**D5. Android backup approach.** See Phase 4. A decision is needed between automatic zip snapshots to a folder the user chooses (for example a Google Drive folder), a manual export prompt, or both.
+**D5. Android backup approach. Decided 1 October 2026.** Android's standard Auto Backup continues to back up the database and settings, and recipe PDFs are backed up separately to the Google Drive application data folder. See Phase 4.
 
 ## Phased plan
 
@@ -76,7 +77,9 @@ These items are independent of billing and can ship to the OnePlus over adb as s
 5. **Date-stamped fallback names.** Replace the fixed "Photographed recipe" with "Photographed 1 Oct 2026", adding " (2)", " (3)" and so on for duplicates, as `RecipesModel.photographedFallbackName()` does on iOS.
 6. **Photo PDF size.** Photograph a recipe on the OnePlus and measure the stored PDF. iOS produced 29 MB single-page PDFs until its encoder was fixed, and the Worker rejects anything over 15 MB. If Android's PDFs are large, write the photo as a JPEG at a 2200 pixel long edge and embed the JPEG bytes directly in the PDF, then add a one-off compaction pass for PDFs already stored, as `ios/HobPad/Recipes/PdfCompactor.swift` does. This item is a prerequisite for metering.
 
-Every change is checked on the emulator and the OnePlus, in light and dark themes, and on both the inner and cover screens of the foldable.
+7. **Light theme.** Add a light colour scheme that follows the system setting, as iOS does. The app is currently dark-only by design (`APP/ui/theme/Theme.kt`).
+
+Every change is checked on the emulator and the OnePlus, in light and dark themes once item 7 exists, and on both the inner and cover screens of the foldable.
 
 Size: medium in total. Item 6 is the only one with technical uncertainty.
 
@@ -110,9 +113,27 @@ Size: small to medium. Both features reuse server behaviour that is already live
 
 ### Phase 4. Backup
 
-Android Auto Backup has a 25 MB quota and the backup rules exclude recipe PDFs, so a phone replacement today loses every recipe file unless the user exported a zip by hand. The candidate solution, recorded in September, is automatic zip snapshots on a schedule, written with WorkManager to a folder the user picks once through the storage access framework (for example a Google Drive folder), reusing `BackupManager`. The account identifier must also survive a restore, which Phase 2's identity work covers.
+Android's standard mechanism is Auto Backup, which copies app data to the user's Google Drive roughly nightly with no user action. Google allows each app 25 MB, and an app over that limit is not backed up at all. A real recipe collection exceeds it: the September migration archive of Chris's data was 60 MB, almost entirely recipe PDFs, while the database was about 200 KB. The backup rules therefore exclude recipe PDFs from cloud backup so that everything else stays within the limit.
 
-Size: medium, subject to decision D5.
+Device-to-device transfer follows separate rules with no documented limit, and HobPad's rules already include the PDFs there. A customer moving to a new phone with the old one to hand keeps everything. The gap is a cloud restore after a phone is lost, broken or reset, which brings back the database without the PDF files.
+
+The decided solution keeps Auto Backup for the database and adds the Google Drive application data folder for the PDFs. This is a hidden folder in the customer's own Drive, private to the app and invisible in the Drive interface. Access needs the `drive.appdata` permission, which Google classifies as non-sensitive, so no Google app verification is required. The customer grants it once with a standard Google consent prompt. HobPad still has no accounts of its own.
+
+The design has five parts.
+
+1. **Consent.** A Settings switch turns on recipe file backup and requests the `drive.appdata` permission through Google's authorization client. Background work afterwards obtains access silently.
+2. **Upload.** Background work uploads every local recipe PDF that the hidden folder does not yet hold. It runs on a schedule and after recipes are added.
+3. **Restore.** At launch, any attachment the database references whose file is missing locally is downloaded from the hidden folder. This closes the cloud-restore gap.
+4. **Deletion.** Remote files are deleted only when the app records a local deletion. Absence is never treated as deletion, because a freshly installed phone with an empty database must never erase the customer's backup.
+5. **Status.** Settings shows whether backup is on, when it last completed, and whether the permission needs granting again.
+
+External setup is required before an end-to-end test. A Google Cloud project with the Drive API enabled needs an Android OAuth client registered for the app's package name and signing certificate fingerprint, one for the debug certificate and one per release certificate.
+
+The account identifier must also survive a restore, which Phase 2's identity work covers.
+
+**Implementation status, 1 October 2026.** Built on the local branch `android-drive-backup` in `app/src/main/java/uk/co/promptbuilt/notestodos/backup/` (`DriveBackup`, `DriveAppDataClient`, `DrivePdfSyncPlan`, `DriveSyncWorker`) with the Settings section in `ui/recipes/DriveBackupSection.kt`. The sync rules have ten unit tests, including one proving that a fresh install never deletes the backup. Verified on the emulator: the Settings section, the hand-off to Google's consent flow, and cancelling it. Not yet verified: a real upload and restore, which needs the Google Cloud registration described above.
+
+Size: medium.
 
 ### Phase 5. Google Play launch
 
@@ -165,10 +186,10 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 3. Block Store's suitability for the account identifier (needs a device spike).
 4. The size of Android photo PDFs (not measured).
 5. The choice between Real-time Developer Notifications and the Voided Purchases API for refunds (needs the Phase 2 spike).
+6. Whether files in the Drive application data folder count against the customer's Drive storage (Google's page does not say; expected but unconfirmed).
 
 ## Open questions for Chris
 
 1. Does a Google Play developer account exist, and is it personal or an organisation account?
 2. Do you agree with the recommendations in D1 to D4?
-3. Which backup approach do you prefer for D5?
-4. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
+3. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
