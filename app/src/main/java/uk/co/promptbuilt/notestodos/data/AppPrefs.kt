@@ -1,6 +1,7 @@
 package uk.co.promptbuilt.notestodos.data
 
 import android.content.Context
+import android.os.Build
 import android.icu.util.LocaleData
 import android.icu.util.ULocale
 import java.text.SimpleDateFormat
@@ -27,9 +28,16 @@ class AppPrefs(context: Context) {
     fun resolvedUnits(): String = when (units) {
         Units.METRIC -> "metric"
         Units.US -> "us"
-        Units.AUTOMATIC ->
-            if (LocaleData.getMeasurementSystem(ULocale.getDefault()) == LocaleData.MeasurementSystem.US) "us" else "metric"
+        Units.AUTOMATIC -> if (usesUsCustomary()) "us" else "metric"
     }
+
+    /** ICU's measurement system arrived in API 28; older phones fall back to the region code. */
+    private fun usesUsCustomary(): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            LocaleData.getMeasurementSystem(ULocale.getDefault()) == LocaleData.MeasurementSystem.US
+        } else {
+            Locale.getDefault().country in US_CUSTOMARY_REGIONS
+        }
 
     /**
      * Automatic naming costs real money per call, so free accounts get 30 a day (the Worker's
@@ -51,6 +59,7 @@ class AppPrefs(context: Context) {
 
     companion object {
         const val AUTO_NAME_DAILY_LIMIT = 30
+        private val US_CUSTOMARY_REGIONS = setOf("US", "LR", "MM")
         private const val KEY_UNITS = "units"
         private const val KEY_NAME_DAY = "auto_name_day"
         private const val KEY_NAME_COUNT = "auto_name_count"
