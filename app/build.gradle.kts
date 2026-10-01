@@ -17,8 +17,9 @@ android {
         applicationId = "uk.co.promptbuilt.hobpad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.4.3"
+        versionCode = 8
+        versionName = "0.4.4"
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     // Play upload key, configured in ~/.gradle/gradle.properties (never in the repo), as RiderNav does
@@ -42,6 +43,12 @@ android {
         // also accepts test purchases; release builds talk to production.
         debug {
             buildConfigField("String", "OPS_WORKER_URL", "\"https://hobpad-ops-staging.chris-f50.workers.dev\"")
+            // `-PdeviceTest` builds a separately installable "HobPad dev", so a test build can sit
+            // beside the Play-installed app on a real phone without replacing it or its data.
+            if (project.hasProperty("deviceTest")) {
+                applicationIdSuffix = ".dev"
+                manifestPlaceholders["appLabel"] = "HobPad dev"
+            }
         }
         release {
             isMinifyEnabled = true

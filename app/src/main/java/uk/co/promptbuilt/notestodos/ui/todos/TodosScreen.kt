@@ -17,7 +17,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -268,11 +270,17 @@ private fun AddTodoRow(category: String, onAdd: (String) -> Unit) {
             .padding(horizontal = 12.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Unmistakably a place to type, with a filled Add beside it: plain text buttons read
+        // as decoration (Chris's feedback on iOS, Sept 30).
         OutlinedTextField(
             value = draft,
             onValueChange = { draft = it },
             modifier = Modifier.weight(1f),
             placeholder = { Text("Add to $category…") },
+            leadingIcon = {
+                Icon(Icons.Outlined.Edit, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            shape = MaterialTheme.shapes.extraLarge,
             singleLine = true,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.Sentences,
@@ -280,7 +288,11 @@ private fun AddTodoRow(category: String, onAdd: (String) -> Unit) {
             ),
             keyboardActions = KeyboardActions(onDone = { submit() }),
         )
-        TextButton(onClick = ::submit) { Text("Add") }
+        Button(
+            onClick = ::submit,
+            enabled = draft.isNotBlank(),
+            modifier = Modifier.padding(start = 8.dp),
+        ) { Text("Add") }
     }
 }
 

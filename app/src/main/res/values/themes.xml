@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Window theme only; the real theming lives in Compose (ui/theme/Theme.kt).
-         Dark background avoids a white flash before Compose draws. -->
-    <style name="Theme.NotesTodos" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#121212</item>
-        <item name="android:statusBarColor">#121212</item>
+         The window background matches the Compose background so launch has no flash;
+         values-night carries the dark one. -->
+    <style name="Theme.NotesTodos" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFFFFF</item>
     </style>
 </resources>

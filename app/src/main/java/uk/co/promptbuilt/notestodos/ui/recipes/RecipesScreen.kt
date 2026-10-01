@@ -256,7 +256,8 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp),
+                    .padding(12.dp)
+                    .verticalScroll(rememberScrollState()),
                 shape = MaterialTheme.shapes.large,
             ) {
                 RecipeForm(
@@ -414,6 +415,7 @@ private fun RecipeForm(
                 .padding(top = 8.dp),
             placeholder = { Text("Recipe notes (optional)…") },
             minLines = 4,
+            maxLines = 12,
         )
 
         Row(modifier = Modifier.padding(top = 8.dp)) {
@@ -577,13 +579,15 @@ private fun RecipeViewerDialog(
                     TextButton(onClick = onClose) { Text("Close") }
                 }
                 if (recipe.notes.isNotBlank()) {
-                    LinkifiedText(
-                        text = recipe.notes,
-                        style = MaterialTheme.typography.bodyMedium,
+                    // Long notes scroll within their band, as on iOS, rather than being cut off.
+                    Box(
                         modifier = Modifier
                             .padding(vertical = 8.dp)
-                            .heightIn(max = 160.dp),
-                    )
+                            .heightIn(max = 160.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        LinkifiedText(text = recipe.notes, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 if (attachments.isNotEmpty()) {
                     PdfViewer(

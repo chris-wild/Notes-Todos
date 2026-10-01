@@ -1,5 +1,9 @@
 package uk.co.promptbuilt.notestodos.ui.notes
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -330,6 +334,10 @@ private fun NoteCard(
     }
 }
 
+/**
+ * Opening a note shows it read-only, with links tappable, and an obvious Edit button; Edit
+ * switches to the editor in place. Mirrors iOS's NoteSheet.
+ */
 @Composable
 private fun NoteEditorDialog(
     note: NoteEntity,
@@ -337,6 +345,7 @@ private fun NoteEditorDialog(
     onClose: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    var editing by rememberSaveable(note.id) { mutableStateOf(false) }
     var title by rememberSaveable(note.id) { mutableStateOf(note.title) }
     var content by rememberSaveable(note.id) { mutableStateOf(note.content) }
 
@@ -354,30 +363,65 @@ private fun NoteEditorDialog(
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    TextButton(onClick = onDelete) { Text("Delete") }
                     TextButton(onClick = onClose) { Text("Close") }
-                    TextButton(onClick = { onSave(title, content) }) { Text("Save") }
+                    Text(
+                        text = if (editing) "Edit Note" else "Note",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (editing) {
+                        TextButton(onClick = { onSave(title, content) }) { Text("Save") }
+                    } else {
+                        TextButton(onClick = onDelete) {
+                            Text("Delete", color = MaterialTheme.colorScheme.error)
+                        }
+                        Button(onClick = {
+                            title = note.title
+                            content = note.content
+                            editing = true
+                        }) { Text("Edit") }
+                    }
                 }
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Title") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                )
-                OutlinedTextField(
-                    value = content,
-                    onValueChange = { content = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .padding(top = 8.dp),
-                    placeholder = { Text("Take a note…") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                )
+                if (editing) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Title") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    )
+                    OutlinedTextField(
+                        value = content,
+                        onValueChange = { content = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .padding(top = 8.dp),
+                        placeholder = { Text("Take a note…") },
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    )
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                    ) {
+                        if (note.title.isNotBlank()) {
+                            Text(
+                                text = note.title,
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                            )
+                        }
+                        LinkifiedText(text = note.content, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
             }
         }
     }
