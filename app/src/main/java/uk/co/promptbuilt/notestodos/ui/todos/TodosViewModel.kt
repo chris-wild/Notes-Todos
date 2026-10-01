@@ -89,6 +89,25 @@ class TodosViewModel(
         viewModelScope.launch { repository.deleteTodo(id) }
     }
 
+    /**
+     * Deletes every visible todo. Emptying a non-default category removes the category too,
+     * but only when the whole category is going: a search shows a subset and leaves survivors.
+     */
+    fun deleteAllVisible() {
+        val state = uiState.value
+        val ids = state.visibleTodos.map { it.id }
+        val removeCategory = removesCategory(state)
+        val category = state.activeCategory
+        if (removeCategory) savedState[KEY_ACTIVE_CATEGORY] = CategoryDefaults.GENERAL
+        viewModelScope.launch {
+            ids.forEach { repository.deleteTodo(it) }
+            if (removeCategory) repository.deleteCategory(category)
+        }
+    }
+
+    fun removesCategory(state: TodosUiState): Boolean =
+        !CategoryRules.isDefault(state.activeCategory) && state.query.isBlank()
+
     /** Returns false when the name is blank or already exists; selects the new category on success. */
     suspend fun addCategory(name: String): Boolean {
         val added = repository.addCategory(name)

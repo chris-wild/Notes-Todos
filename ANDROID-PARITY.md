@@ -17,13 +17,11 @@ Every item below was checked on 1 October 2026 against the source, Play Console 
 
 ### Engineering work that can start now
 
-1. **Ship the units fix.** Commit 235664e stops Automatic units from crashing on Android 8.0 and 8.1, which lack the system call the code used. It is committed but not yet in a Play build. The Android 8 fallback has not been run on a device, because no Android 8 emulator is installed.
-2. **Todos Delete All.** Still absent on Android. It should remove an emptied category in the same operation, as iOS does.
-3. **Edit and Delete in the open recipe.** Still absent. Android offers them only on the list row, and the delete confirmation must appear over the open recipe with Cancel.
-4. **Light theme.** Still absent. The app is dark-only.
-5. **Untested paths.** Three paths have not been exercised. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
-6. **Photo PDFs saved before 0.4.1.** Photographs taken with the earlier builds are stored at up to 4000 pixels. They display correctly now, but a one-off compaction pass, as iOS has, would shrink them. This is optional.
-7. **Native debug symbols.** Play warns on every upload that no debug symbol file is attached. This is optional and affects only crash reports.
+1. **Ship version 0.4.3.** Built (version code 7) and awaiting upload. It carries three changes, all verified on the emulator. The first is the units fix (commit 235664e), which stops Automatic units from crashing on Android 8.0 and 8.1; its Android 8 fallback has not been run on a device, because no Android 8 emulator is installed. The second is Todos Delete All, which asks for confirmation with Cancel and removes an emptied custom category, as iOS does. The third is Edit and Delete in the open recipe, plus an enlarge button in the corner of each recipe page, matching the iOS control, because tapping the page to enlarge it was not discoverable.
+2. **Light theme.** Still absent. The app is dark-only.
+3. **Untested paths.** Three paths have not been exercised. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
+4. **Photo PDFs saved before 0.4.1.** Photographs taken with the earlier builds are stored at up to 4000 pixels. They display correctly now, but a one-off compaction pass, as iOS has, would shrink them. This is optional.
+5. **Native debug symbols.** Play warns on every upload that no debug symbol file is attached. This is optional and affects only crash reports.
 
 ### Decisions for Chris
 
@@ -128,8 +126,8 @@ Size: small in effort, long in elapsed time.
 
 These items are independent of billing and can ship to the OnePlus over adb as soon as each is done.
 
-1. **Todos Delete All.** Add the Delete All action with a confirmation, and remove an emptied non-default category in the same operation, mirroring `TodosModel.delete(ids:removeCategory:)` in `ios/HobPad/Todos/TodosModel.swift`.
-2. **Recipe viewer actions.** Add Edit and Delete to the open recipe. The delete confirmation must appear over the open recipe and offer Cancel.
+1. **Done in 0.4.3.** **Todos Delete All.** Add the Delete All action with a confirmation, and remove an emptied non-default category in the same operation, mirroring `TodosModel.delete(ids:removeCategory:)` in `ios/HobPad/Todos/TodosModel.swift`.
+2. **Done in 0.4.3.** **Recipe viewer actions.** Add Edit and Delete to the open recipe. The delete confirmation must appear over the open recipe and offer Cancel.
 3. **Done.** **Create ingredient list flow.** Replace the header text button with a full-width primary button, move the quantities stepper into a conversion dialog, and open the newly created todo category afterwards. This last step needs the target category passed to the Todos screen, as iOS does with `AppServices.pendingTodoCategory`.
 4. **Done.** **Linked recipe notes.** Render recipe notes in the viewer with the existing `LinkifiedText` composable.
 5. **Done.** **Date-stamped fallback names.** Replace the fixed "Photographed recipe" with "Photographed 1 Oct 2026", adding " (2)", " (3)" and so on for duplicates, as `RecipesModel.photographedFallbackName()` does on iOS.

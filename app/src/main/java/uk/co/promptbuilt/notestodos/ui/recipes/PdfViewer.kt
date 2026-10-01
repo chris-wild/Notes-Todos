@@ -15,7 +15,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -94,15 +98,25 @@ fun PdfViewer(files: List<File>, modifier: Modifier = Modifier) {
 
     LazyColumn(modifier = modifier) {
         itemsIndexed(pages) { _, (ref, bitmap) ->
-            Image(
-                bitmap = bitmap.asImageBitmap(),
-                contentDescription = "Recipe page ${ref.index + 1}. Tap to enlarge.",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp)
-                    .clickable { zoomed = ref },
-                contentScale = ContentScale.FillWidth,
-            )
+            // The corner button is iOS's enlarge control; tapping the page itself works too.
+            Box(modifier = Modifier.padding(vertical = 2.dp)) {
+                Image(
+                    bitmap = bitmap.asImageBitmap(),
+                    contentDescription = "Recipe page ${ref.index + 1}",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { zoomed = ref },
+                    contentScale = ContentScale.FillWidth,
+                )
+                FilledTonalIconButton(
+                    onClick = { zoomed = ref },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp),
+                ) {
+                    Icon(Icons.Filled.OpenInFull, contentDescription = "Enlarge page ${ref.index + 1}")
+                }
+            }
         }
     }
 

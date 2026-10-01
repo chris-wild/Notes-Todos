@@ -61,6 +61,7 @@ fun TodosScreen() {
     var categoryDraft by rememberSaveable { mutableStateOf("") }
     var categoryError by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmDeleteCategory by remember { mutableStateOf<String?>(null) }
+    var confirmDeleteAll by remember { mutableStateOf(false) }
 
     fun submitCategory() {
         val name = categoryDraft.trim()
@@ -181,6 +182,18 @@ fun TodosScreen() {
                 modifier = Modifier.padding(16.dp),
             )
         } else {
+            // Bulk deletion is one visible button on the list it empties, as on iOS;
+            // per-item deletion stays the bin on each row.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = { confirmDeleteAll = true }) {
+                    Text("Delete all", color = MaterialTheme.colorScheme.error)
+                }
+            }
             LazyColumn(modifier = Modifier.fillMaxSize()) {
                 items(state.visibleTodos, key = { it.id }) { todo ->
                     TodoRow(
@@ -191,6 +204,33 @@ fun TodosScreen() {
                 }
             }
         }
+    }
+
+    if (confirmDeleteAll) {
+        val count = state.visibleTodos.size
+        val removesCategory = viewModel.removesCategory(state)
+        AlertDialog(
+            onDismissRequest = { confirmDeleteAll = false },
+            title = { Text(if (count == 1) "Delete the only todo?" else "Delete all $count todos?") },
+            text = {
+                Text(
+                    if (removesCategory) {
+                        "Everything in \"${state.activeCategory}\" will be deleted, and the empty category removed."
+                    } else {
+                        "Everything in \"${state.activeCategory}\" will be deleted."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAllVisible()
+                    confirmDeleteAll = false
+                }) { Text("Delete all", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteAll = false }) { Text("Cancel") }
+            },
+        )
     }
 
     confirmDeleteCategory?.let { category ->

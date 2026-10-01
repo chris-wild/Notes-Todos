@@ -233,6 +233,21 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
         }
     }
 
+    viewingRecipe?.let { opened ->
+        // The live row, so a rename made from the viewer shows straight away.
+        val recipe = state.recipes.firstOrNull { it.id == opened.id } ?: opened
+        RecipeViewerDialog(
+            recipe = recipe,
+            attachments = state.attachmentsByRecipe[recipe.id].orEmpty(),
+            recipeFiles = app.recipeFiles,
+            working = state.working != null,
+            onCreateIngredients = { startConversion(recipe) },
+            onEdit = { editingRecipe = recipe },
+            onDelete = { deleteTarget = recipe },
+            onClose = { viewingRecipe = null },
+        )
+    }
+
     editingRecipe?.let { recipe ->
         Dialog(
             onDismissRequest = { editingRecipe = null },
@@ -258,17 +273,6 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
                 )
             }
         }
-    }
-
-    viewingRecipe?.let { recipe ->
-        RecipeViewerDialog(
-            recipe = recipe,
-            attachments = state.attachmentsByRecipe[recipe.id].orEmpty(),
-            recipeFiles = app.recipeFiles,
-            working = state.working != null,
-            onCreateIngredients = { startConversion(recipe) },
-            onClose = { viewingRecipe = null },
-        )
     }
 
     converting?.let { (recipe, cost) ->
@@ -537,6 +541,8 @@ private fun RecipeViewerDialog(
     recipeFiles: RecipeFiles,
     working: Boolean,
     onCreateIngredients: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
     onClose: () -> Unit,
 ) {
     Dialog(
@@ -554,8 +560,20 @@ private fun RecipeViewerDialog(
                     Text(
                         text = recipe.name,
                         style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Outlined.Edit, contentDescription = "Edit recipe")
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            Icons.Outlined.Delete,
+                            contentDescription = "Delete recipe",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     TextButton(onClick = onClose) { Text("Close") }
                 }
                 if (recipe.notes.isNotBlank()) {
