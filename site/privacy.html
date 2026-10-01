@@ -23,20 +23,26 @@
 </div>
 
 <div class="wrap band prose">
-  <p class="label">Privacy policy · Effective 30 September 2026</p>
+  <p class="label">Privacy policy · Effective 1 October 2026</p>
   <h1>Privacy</h1>
 
   <h3>The short version</h3>
-  <p>Your notes, todos and recipes live on your device. HobPad has no accounts, no advertising, no analytics and no tracking, and it never sells data. The only time recipe content leaves your device is when you ask for a recipe to be converted into a shopping list, and that content is processed transiently and is not stored by us.</p>
+  <p>Your notes, todos and recipes live on your device. HobPad has no accounts, no advertising, no analytics and no tracking, and it never sells data. Recipe content leaves your device in three situations only. A photographed recipe is sent to our service to be named. A recipe you convert into a shopping list is sent to our service for its ingredients to be extracted. On Android, if you turn on recipe file backup, your recipe files are copied to your own Google Drive. Content sent to our service is processed transiently and is not stored by us.</p>
 
   <h3>What stays on your device</h3>
-  <p>Everything you create in HobPad, including notes, todo lists, recipes, photographs and imported PDFs, is stored in a database on your device. If you use iCloud Backup, that data is included in your device backup under your own Apple account, where it is governed by Apple's terms rather than ours. We have no access to your backups.</p>
+  <p>Everything you create in HobPad, including notes, todo lists, recipes, photographs and imported PDFs, is stored on your device. On iPhone and iPad, if you use iCloud Backup, that data is included in your device backup under your own Apple account, where it is governed by Apple's terms rather than ours. On Android, Android's own backup includes your notes, todo lists and recipe details in the backup held by your Google account, under Google's terms. We have no access to your backups.</p>
 
-  <h3>Recipe conversion</h3>
-  <p>When you tap Create ingredient list, the pages of that recipe, or its typed notes, are sent over an encrypted connection to our conversion service so that an ingredient list can be extracted. The extraction itself is performed by Anthropic's Claude API, acting as our processor. Our service does not store your recipe content. It relays the content, counts the pages for billing, and returns the result. Anthropic's commercial API terms state that content submitted through the API is not used to train its models.</p>
+  <h3>Recipe naming and conversion</h3>
+  <p>When you photograph a recipe, the photographed page is sent over an encrypted connection to our service so that a short name can be suggested for it. When you tap Create ingredient list, the pages of that recipe, or its typed notes, are sent over an encrypted connection to our conversion service so that an ingredient list can be extracted. The extraction itself is performed by Anthropic's Claude API, acting as our processor. Our service does not store your recipe content. It relays the content, counts the pages for billing, and returns the result. Anthropic's commercial API terms state that content submitted through the API is not used to train its models.</p>
 
   <h3>Credits and purchases</h3>
-  <p>Conversion credits are tied to a randomly generated identifier created on your device and stored in your iCloud Keychain. It contains no personal information and is not linked to your identity. When you buy a credit pack, the purchase is handled entirely by Apple. We never see your payment details. Our service keeps a ledger of credit grants, purchases by transaction number, and credit spends, so that your balance is correct and refunds can be honoured. That ledger contains the anonymous identifier and nothing about you.</p>
+  <p>On iPhone and iPad, conversion credits are tied to a randomly generated identifier created on your device and stored in your iCloud Keychain. It contains no personal information and is not linked to your identity. When you buy a credit pack, the purchase is handled entirely by Apple. We never see your payment details. Our service keeps a ledger of credit grants, purchases by transaction number, and credit spends, so that your balance is correct and refunds can be honoured. That ledger contains the anonymous identifier and nothing about you.</p>
+
+  <h3>Recipe file backup on Android</h3>
+  <p>Android's own backup cannot hold recipe photographs and PDFs, so HobPad for Android offers a separate recipe file backup. It is off until you turn it on in Settings. When you turn it on, Google asks you to allow HobPad to see, create and delete its own data in your Google Drive. HobPad then copies your recipe photographs and PDFs into a private folder in your own Google Drive. That folder is hidden from the Google Drive interface and from other apps, and the permission does not allow HobPad to see any of your other Drive files.</p>
+  <p>The files travel directly between your device and Google. They never pass through, and are never stored on, our service. HobPad uses this access only to back up your recipe files and to restore them to a new or reset device, and for no other purpose.</p>
+  <p>You can turn recipe file backup off at any time in Settings. Turning it off stops further backups but leaves the existing copies in your Drive. To delete those copies, open the settings in Google Drive, choose Manage apps, and delete HobPad's hidden app data. You can withdraw HobPad's access entirely from the list of third-party apps in your Google Account.</p>
+  <p>HobPad's use and transfer of information received from Google APIs adheres to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
   <h3>What we do not do</h3>
   <ul>
@@ -47,7 +53,7 @@
   </ul>
 
   <h3>Your choices</h3>
-  <p>Recipe conversion is the only feature that sends content off the device, and it only ever runs when you ask it to. If you never use it, nothing you create in HobPad leaves your phone except through your own backups.</p>
+  <p>Recipe naming, recipe conversion and, on Android, recipe file backup are the only features that send content off your device. Naming and conversion run only when you photograph or convert a recipe, and recipe file backup runs only once you have turned it on. If you use none of them, nothing you create in HobPad leaves your device except through your own backups.</p>
 
   <h3>Contact</h3>
   <p>Questions about this policy can be sent through the <a href="/support.html">support page</a>.</p>

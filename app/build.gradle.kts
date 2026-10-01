@@ -20,10 +20,27 @@ android {
         versionName = "0.2.0"
     }
 
+    // Play upload key, configured in ~/.gradle/gradle.properties (never in the repo), as RiderNav does
+    // (ridernav/ANDROID_RELEASE.md). Play App Signing holds the final app-signing key; this one only
+    // authenticates uploads. Without the properties, release builds fall back to the debug key so a
+    // machine without the keystore can still build, but such a bundle cannot be uploaded to Play.
+    val uploadStoreFile = providers.gradleProperty("HOBPAD_UPLOAD_STORE_FILE").orNull
+    signingConfigs {
+        if (uploadStoreFile != null) {
+            create("release") {
+                storeFile = file(uploadStoreFile)
+                storePassword = providers.gradleProperty("HOBPAD_UPLOAD_STORE_PASSWORD").orNull
+                keyAlias = providers.gradleProperty("HOBPAD_UPLOAD_KEY_ALIAS").orNull
+                keyPassword = providers.gradleProperty("HOBPAD_UPLOAD_KEY_PASSWORD").orNull
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
 

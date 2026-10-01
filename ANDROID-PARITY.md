@@ -58,8 +58,8 @@ Sizes are relative and ESTIMATED, not measured. They indicate order of magnitude
 
 Some Google Play steps take calendar time regardless of engineering effort, so they should begin before any code is written.
 
-1. Confirm whether a Google Play developer account exists, and whether it is a personal or an organisation account.
-2. If it is a personal account created after 13 November 2023, Google requires a closed test with at least 12 testers, opted in for 14 consecutive days, before production access can be requested. This requirement should be verified against the current Play Console help, but if it applies, recruiting testers is the critical path for the whole launch.
+1. **Answered 1 October 2026.** A Google Play developer account exists. It is the personal account registered for RiderNav (`/Volumes/DATA/Projects/RiderNav/ridernav/GOOGLE_DEPLOYMENT_CHECKLIST.md`).
+2. **Applies.** Because it is a personal account created after 13 November 2023, Google requires a closed test with at least 12 testers, opted in for 14 continuous days, before production access can be requested. Only closed testing counts; internal testing does not. Recruiting testers is therefore the critical path for the whole launch. RiderNav's existing beta group (ridernav-testers@googlegroups.com) could double as HobPad's testers.
 3. Set up a Google payments merchant profile, which selling credit packs requires.
 4. Create the Play Console app record under the ID chosen in D1.
 5. Create a Google Cloud service account with Play Developer API access, which the Worker needs to verify purchases.
@@ -135,11 +135,11 @@ The account identifier must also survive a restore, which Phase 2's identity wor
 
 Verified on Chris's OnePlus against his real data. The first pass backed up all 63 recipe PDFs. Two PDFs deleted behind the app's back were restored at the next launch with identical checksums. A newly saved recipe's PDF was uploaded within about 25 seconds, and deleting that recipe in the app removed its Drive copy within about 20 seconds. Testing found and fixed one bug: a PDF is stored when it is picked but only becomes worth keeping when the recipe is saved, so the backup now also runs whenever the set of attachments changes.
 
-**Before launch.** Three items remain.
+**Before launch.** Status as of 1 October 2026.
 
-1. Add the hobpad.app home page and privacy policy to the consent screen's branding (Google's screen currently notes that it has no privacy policy link), then publish the consent screen from testing to production. While it is in testing mode, Google expires each grant after seven days, so the app will ask for access again weekly.
-2. Register a release OAuth client with the upload key and Play app signing certificate fingerprints, and with the final application ID from decision D1.
-3. Update `site/privacy.html` to describe the Drive backup.
+1. **Done.** The consent screen's branding carries the hobpad.app home page, the privacy policy link and the authorised domain `hobpad.app`, with no logo so that Google verification is not required. The consent screen is published in production.
+2. **Partly done.** A HobPad upload key now exists at `~/keystores/hobpad-upload.jks` (SHA-1 `3A:27:85:15:A6:68:C7:24:A8:6A:59:FC:12:14:5B:0C:B2:7D:5A:8B`), its credentials are in `~/.gradle/gradle.properties` under `HOBPAD_UPLOAD_*`, release builds sign with it, and it is registered with Google for the current application ID. Still needed: a registration for the Play app signing certificate, which only exists once the app is created in Play Console, and both registrations repeated under the final application ID if decision D1 changes it.
+3. **Done.** `site/privacy.html` describes recipe file backup on Android, including the Google API Services User Data Policy statement, and `site/support.html` answers the backup question for Android as well as iOS.
 
 Size: medium.
 
@@ -185,19 +185,17 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 1. The Android app uses only the bring-your-own-key path and has no billing, account identity or units setting.
 2. The shared ingredient logic, including the multiplier, is already used by Android.
 3. Android lacks Delete All, viewer delete, linked recipe notes and the conversion dialog, and uses the fixed fallback name "Photographed recipe".
-4. The privacy policy describes only Apple platform behaviour.
+4. The privacy policy described only Apple platform behaviour until 1 October 2026, when the Android backup section was added.
+5. The Google Play developer account is a personal account, so the 12-tester, 14-day closed test applies (RiderNav's `GOOGLE_DEPLOYMENT_CHECKLIST.md`).
 
 **Assumptions requiring confirmation:**
 
-1. The state of the Google Play developer account (not checked).
-2. The closed testing requirement and its exact thresholds (from recollection of Google's policy, to be confirmed in Play Console help).
-3. Block Store's suitability for the account identifier (needs a device spike).
-4. The size of Android photo PDFs (not measured).
-5. The choice between Real-time Developer Notifications and the Voided Purchases API for refunds (needs the Phase 2 spike).
-6. Whether files in the Drive application data folder count against the customer's Drive storage (Google's page does not say; expected but unconfirmed).
+1. Block Store's suitability for the account identifier (needs a device spike).
+2. The size of Android photo PDFs (not measured).
+3. The choice between Real-time Developer Notifications and the Voided Purchases API for refunds (needs the Phase 2 spike).
+4. Whether files in the Drive application data folder count against the customer's Drive storage (Google's page does not say; expected but unconfirmed).
 
 ## Open questions for Chris
 
-1. Does a Google Play developer account exist, and is it personal or an organisation account?
-2. Do you agree with the recommendations in D1 to D4?
-3. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
+1. Do you agree with the recommendations in D1 to D4?
+2. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
