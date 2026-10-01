@@ -1,6 +1,64 @@
 # Android parity plan
 
-Status as of 1 October 2026. iOS version 1.0.1 (build 26) is waiting for App Store review. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play.
+Status as of 1 October 2026, 22:00. iOS version 1.0.1 (build 26) is waiting for App Store review. Android version 0.4.2 (version code 6) is live on the Google Play internal testing track for Chris only, and the first Google Play purchase has been proven end to end. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play. The next section lists what is left. The sections after it are the original plan, kept as the record of how the work was scoped, with status notes added where items have since been completed.
+
+## What is left
+
+Every item below was checked on 1 October 2026 against the source, Play Console or the live Worker. Items are grouped by who can act on them.
+
+### Built and proven
+
+1. Metered conversion through the Worker, with the personal key confined to debug builds.
+2. Credit packs through Google Play Billing. The three packs exist in Play Console (`uk.co.promptbuilt.hobpad.ops50`, `ops100` and `ops500`, at £1.99, £2.99 and £9.99 in the UK including VAT), and a licence-test purchase was credited by the production Worker (see "First Google Play purchase" below).
+3. The daily naming allowance, the no-recipe naming fix and the Units setting.
+4. Recipe file backup to the Google Drive application data folder.
+5. The conversion flow, the fix for the crash when opening a photographed recipe, and full-screen pinch-to-zoom for recipe pages.
+6. Play Console foundations: the HobPad payments profile (organisation profile "HobPad", payouts to a bank account that Google was still verifying at the time of writing), enrolment in the 15% service fee, the purchase-verification service account, licence testing, and Android developer verification.
+
+### Engineering work that can start now
+
+1. **Ship the units fix.** Commit 235664e stops Automatic units from crashing on Android 8.0 and 8.1, which lack the system call the code used. It is committed but not yet in a Play build. The Android 8 fallback has not been run on a device, because no Android 8 emulator is installed.
+2. **Todos Delete All.** Still absent on Android. It should remove an emptied category in the same operation, as iOS does.
+3. **Edit and Delete in the open recipe.** Still absent. Android offers them only on the list row, and the delete confirmation must appear over the open recipe with Cancel.
+4. **Light theme.** Still absent. The app is dark-only.
+5. **Untested paths.** Three paths have not been exercised. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
+6. **Photo PDFs saved before 0.4.1.** Photographs taken with the earlier builds are stored at up to 4000 pixels. They display correctly now, but a one-off compaction pass, as iOS has, would shrink them. This is optional.
+7. **Native debug symbols.** Play warns on every upload that no debug symbol file is attached. This is optional and affects only crash reports.
+
+### Decisions for Chris
+
+1. **Paywall diagnostic.** Since 0.4.1, when the credit packs cannot load, the paywall shows Google Play's response code under the message. It made the missing-packs problem diagnosable, but customers will also see it. The recommendation is to keep it, because it costs nothing and helps support.
+2. **D3, separate balances.** An iPhone and an Android phone hold separate credit balances. The recommendation remains to accept this and say so in the support FAQ, which does not yet mention it.
+3. **The hobpad.app website.** Whether it should mention Google Play before launch.
+
+### Play Console store setup
+
+Play Console lists ten app content declarations still to complete: privacy policy, ads, sign-in details, content ratings, target audience and content, data safety, advertising ID, government apps, financial features and health apps. The store listing also needs an app category, contact details, a description adapted from the App Store text, a 512 pixel icon, a 1024 by 500 feature graphic and phone screenshots. The privacy policy must first describe Google Play purchases and the Android account identifier, because `site/privacy.html` does not yet mention Google Play.
+
+### Closed test and production access
+
+On hold until Chris recruits HobPad testers. Google requires at least 12 testers opted in for 14 continuous days on the closed testing track before production access can be requested. This sets the earliest possible launch date.
+
+### Production configuration at launch
+
+1. Turn off `ALLOW_GOOGLE_TEST_PURCHASES` on the production Worker before the public Android release. It is on now, which is how the licence-test purchase was credited.
+2. After iOS 1.0.1 is released, tighten `ALLOWED_ENVIRONMENTS` on the production Worker from "Production,Sandbox" to "Production".
+
+### Shared with iOS
+
+1. An iOS build carrying commit dd7122c, which makes iOS read naming replies through the shared title parser. The production Worker already protects the build in review, so this is not urgent.
+2. The App Review outcome for iOS 1.0.1. Release is manual and Chris decides when.
+
+### Housekeeping
+
+1. Turn Recipe file backup back on in the OnePlus's HobPad Settings, since the reinstall turned it off.
+2. Keep offline copies of `~/keystores/hobpad-upload.jks` and `~/keystores/hobpad-play-service-account.json`.
+3. Delete the two Google Cloud OAuth clients for the retired `uk.co.promptbuilt.notestodos` ID.
+4. Optionally, give the Cloudflare API token read access to Workers observability, so the Worker's request log can be checked without the phone.
+
+### After launch
+
+Phase 6 (large screens) below.
 
 ## Purpose and scope
 
@@ -12,7 +70,7 @@ The shared Kotlin core already carries most of the business logic. Ingredient pa
 
 ## Current state
 
-Every row below was checked against the source on 1 October 2026. File references are relative to the repository root. `APP` is `app/src/main/java/uk/co/promptbuilt/notestodos/`.
+This table records the starting point on the morning of 1 October 2026. "What is left" above gives the current state. Every row below was checked against the source on 1 October 2026. File references are relative to the repository root. `APP` is `app/src/main/java/uk/co/promptbuilt/notestodos/`.
 
 | Feature | iOS 1.0.1 | Android today | Evidence |
 |---|---|---|---|
@@ -60,9 +118,9 @@ Some Google Play steps take calendar time regardless of engineering effort, so t
 
 1. **Answered 1 October 2026.** A Google Play developer account exists. It is the personal account registered for RiderNav (`/Volumes/DATA/Projects/RiderNav/ridernav/GOOGLE_DEPLOYMENT_CHECKLIST.md`).
 2. **Applies.** Because it is a personal account created after 13 November 2023, Google requires a closed test with at least 12 testers, opted in for 14 continuous days, before production access can be requested. Only closed testing counts; internal testing does not. Recruiting testers is therefore the critical path for the whole launch. **On hold (1 October 2026):** Chris will recruit a new group of testers for HobPad rather than reuse RiderNav's, so the closed test is not to be set up until he provides them.
-3. Set up a Google payments merchant profile, which selling credit packs requires.
-4. Create the Play Console app record under the ID chosen in D1.
-5. Create a Google Cloud service account with Play Developer API access, which the Worker needs to verify purchases.
+3. **Done 1 October 2026.** Set up a Google payments merchant profile, which selling credit packs requires.
+4. **Done 1 October 2026.** Create the Play Console app record under the ID chosen in D1.
+5. **Done 1 October 2026.** Create a Google Cloud service account with Play Developer API access, which the Worker needs to verify purchases.
 
 Size: small in effort, long in elapsed time.
 
@@ -72,10 +130,10 @@ These items are independent of billing and can ship to the OnePlus over adb as s
 
 1. **Todos Delete All.** Add the Delete All action with a confirmation, and remove an emptied non-default category in the same operation, mirroring `TodosModel.delete(ids:removeCategory:)` in `ios/HobPad/Todos/TodosModel.swift`.
 2. **Recipe viewer actions.** Add Edit and Delete to the open recipe. The delete confirmation must appear over the open recipe and offer Cancel.
-3. **Create ingredient list flow.** Replace the header text button with a full-width primary button, move the quantities stepper into a conversion dialog, and open the newly created todo category afterwards. This last step needs the target category passed to the Todos screen, as iOS does with `AppServices.pendingTodoCategory`.
-4. **Linked recipe notes.** Render recipe notes in the viewer with the existing `LinkifiedText` composable.
-5. **Date-stamped fallback names.** Replace the fixed "Photographed recipe" with "Photographed 1 Oct 2026", adding " (2)", " (3)" and so on for duplicates, as `RecipesModel.photographedFallbackName()` does on iOS.
-6. **Photo PDF size.** Photograph a recipe on the OnePlus and measure the stored PDF. iOS produced 29 MB single-page PDFs until its encoder was fixed, and the Worker rejects anything over 15 MB. If Android's PDFs are large, write the photo as a JPEG at a 2200 pixel long edge and embed the JPEG bytes directly in the PDF, then add a one-off compaction pass for PDFs already stored, as `ios/HobPad/Recipes/PdfCompactor.swift` does. This item is a prerequisite for metering.
+3. **Done.** **Create ingredient list flow.** Replace the header text button with a full-width primary button, move the quantities stepper into a conversion dialog, and open the newly created todo category afterwards. This last step needs the target category passed to the Todos screen, as iOS does with `AppServices.pendingTodoCategory`.
+4. **Done.** **Linked recipe notes.** Render recipe notes in the viewer with the existing `LinkifiedText` composable.
+5. **Done.** **Date-stamped fallback names.** Replace the fixed "Photographed recipe" with "Photographed 1 Oct 2026", adding " (2)", " (3)" and so on for duplicates, as `RecipesModel.photographedFallbackName()` does on iOS.
+6. **Done in 0.4.1.** **Photo PDF size.** Photograph a recipe on the OnePlus and measure the stored PDF. iOS produced 29 MB single-page PDFs until its encoder was fixed, and the Worker rejects anything over 15 MB. If Android's PDFs are large, write the photo as a JPEG at a 2200 pixel long edge and embed the JPEG bytes directly in the PDF, then add a one-off compaction pass for PDFs already stored, as `ios/HobPad/Recipes/PdfCompactor.swift` does. This item is a prerequisite for metering.
 
 7. **Light theme.** Add a light colour scheme that follows the system setting, as iOS does. The app is currently dark-only by design (`APP/ui/theme/Theme.kt`).
 
@@ -147,7 +205,7 @@ Size: medium.
 
 1. **Done.** The application ID chosen in D1 is adopted and the OnePlus data migrated.
 2. **Done.** Play App Signing is active and release bundles are built with `bundleRelease`, signed with the upload key.
-3. Create the three products in Play Console with the agreed prices.
+3. **Done 1 October 2026.** Create the three products in Play Console with the agreed prices.
 4. Complete the Data safety form, the content rating questionnaire and the target audience declaration.
 5. Adapt the approved App Store description and keywords for the Play listing, and produce phone screenshots from the same clean fixture data used for iOS.
 6. Update `site/privacy.html`, which currently describes only iCloud Backup, the iCloud Keychain identifier and Apple purchases. It needs equivalent statements for Google backup, the Android identifier and Google Play purchases.
@@ -170,11 +228,12 @@ Chris asked for full iOS parity, including the web service and the retirement of
 5. **Naming allowance and units (Phase 3 done).** Photographed recipes get date-stamped names and are named through the metered service within 30 per day, with the purchased-credit exemption and the Save, Buy credits and Cancel dialog. The Units setting (Automatic, Metric, US) is passed to extraction. Verified on the emulator.
 6. **Worker.** `POST /v1/purchase/google` and a six-hourly voided-purchases refund pass (`src/google.js`, `src/google-orders.js`), 41 of 41 tests passing, deployed to **staging only**. Production is deliberately unchanged while iOS 1.0.1 is in App Review.
 
-**Blocked, needing Chris.**
+**Formerly blocked, all resolved on 1 October 2026.**
 
-1. **Merchant account.** Play Console reports that a merchant account (Google payments profile) must be set up before HobPad can sell anything. This involves bank and tax details.
-2. **Service account for purchase verification.** A Google Cloud service account with the Google Play Android Developer API enabled, a JSON key stored as the Worker secret `GOOGLE_SERVICE_ACCOUNT_JSON` on both Workers, and an invitation in Play Console with "View financial data, orders, and cancellation survey responses" and "Manage orders and subscriptions".
-3. **Products and a real purchase test.** Once the merchant account exists, the three one-time products are created with the same IDs and prices, and a licence-tester purchase is verified end to end on an internal testing build.
+1. **Merchant account.** A separate organisation payments profile named HobPad was created, so that HobPad income stays apart from Chris Wild Photographic. Chris added the payout bank account.
+2. **Service account for purchase verification.** `play-purchases@hobpad.iam.gserviceaccount.com` exists with its key stored as `GOOGLE_SERVICE_ACCOUNT_JSON` on both Workers. It has Play Console permissions for the HobPad app only, not account-wide.
+3. **Products and a real purchase test.** The three packs were created and a licence-tester purchase was verified end to end. Play's bulk pricing takes a price before VAT, so the bases are £1.66, £2.49 and £8.33, which become £1.99, £2.99 and £9.99 in the UK.
+4. **Production Worker.** Deployed on Chris's instruction while iOS 1.0.1 was still in review, carrying the Google purchase route, the voided-purchases check, units and the no-recipe naming fix. All of these were verified against the live Worker.
 
 **Fixed: titles for pages with no recipe.** Naming a photograph that contains no recipe used to return a junk title from the model (for example "Unable to determine - document contains abstract geometric shapes"). With Chris's approval (1 October 2026), the naming prompt now returns a null title for such pages, and the Worker answers 422 `no_recipe`, so every client, including the shipped iOS build, shows the name dialog instead. This is committed (dd7122c) and live on the staging Worker. It reaches production with the next production Worker deploy, which waits for iOS 1.0.1 to clear App Review. A page with some text but no recipe can still be named from that text, which is acceptable.
 
@@ -194,8 +253,9 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 1. **Closed testing requirement.** If it applies, launch cannot happen sooner than 14 days after 12 testers have opted in.
 2. **Online purchase verification.** Google verification depends on a network call and a service-account credential, unlike Apple's offline signature check. Failures must leave the purchase unconsumed so the client retries, and the Worker must never credit without confirmation.
 3. **Three-day acknowledgement window.** A purchase that is never consumed is refunded automatically. Prompt retry logic is essential.
-4. **Identity persistence.** If Block Store does not behave as expected on the target devices, customers could lose their balance on reinstall. The spike must prove this before any pack is sold.
-5. **Photo PDF size.** Not yet measured on Android. Large PDFs would be rejected by the Worker's 15 MB limit.
+4. **Identity persistence.** Block Store was not used. The account identifier lives in backed-up preferences, so it returns with Android's backup or phone-to-phone transfer. A reinstall before Android's first nightly backup loses it, as the next risk describes.
+5. **Restore timing.** Android's Auto Backup runs roughly once a day. A phone that loses or uninstalls HobPad before the first backup has nothing to restore. This happened on 1 October, when the OnePlus moved from the debug build to the Play build within hours of the application ID change. The data was recovered from a migration archive. A new customer who reinstalls on their first day would lose their notes, todos and recipe records.
+6. **Photo PDF size.** Resolved. Photographs are converted at 2200 pixels on the long edge, as on iOS, giving PDFs of about 0.9 MB, well inside the Worker's 15 MB limit.
 
 ## Verified facts and assumptions
 
@@ -209,14 +269,14 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 
 **Assumptions requiring confirmation:**
 
-1. Block Store's suitability for the account identifier (needs a device spike).
-2. The size of Android photo PDFs (not measured).
-3. The choice between Real-time Developer Notifications and the Voided Purchases API for refunds (needs the Phase 2 spike).
+1. Block Store's suitability for the account identifier. No longer relevant, because backed-up preferences are used instead.
+2. The size of Android photo PDFs. Measured on the emulator at about 0.9 MB for a 4000 by 3008 photo after the 0.4.1 change.
+3. The choice between Real-time Developer Notifications and the Voided Purchases API for refunds. The Voided Purchases API was chosen. It runs every six hours and has not yet been exercised by a real refund.
 4. Whether files in the Drive application data folder count against the customer's Drive storage (Google's page does not say; expected but unconfirmed).
 
 ## Open questions for Chris
 
-1. Do you agree with the recommendations in D1 to D4?
+1. D1, D2 and D5 are settled and D4 was carried out as recommended. D3 (separate balances per platform) still needs a decision.
 2. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
 
 ## First Google Play purchase, 1 October 2026
