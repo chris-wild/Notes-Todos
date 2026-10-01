@@ -218,3 +218,9 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 
 1. Do you agree with the recommendations in D1 to D4?
 2. Should hobpad.app say "Coming soon to Google Play" once Phase 2 begins, or stay iOS-only until launch?
+
+## First Google Play purchase, 1 October 2026
+
+The Play billing chain is proven end to end on Chris's OnePlus. Chris bought the 50-credit pack as a licence tester from the internal-testing build (0.4.2). Google recorded order GPA.3358-4385-8365-92846 as a test purchase in the PROCESSED state. The Play Developer API, queried with the HobPad service account, reports the purchase as consumed and acknowledged, which the app does only after the production Worker has answered 2xx. The production Worker reports the purchasing account at a balance of 54 credits with the purchased flag set, which is the 5 free credits plus the 50 purchased, less 1 credit spent.
+
+Production state after this test: the Worker accepts licence-test purchases (`ALLOW_GOOGLE_TEST_PURCHASES = "1"`). This must be switched off before the Android app is released publicly.
