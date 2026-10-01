@@ -2,6 +2,7 @@ package uk.co.promptbuilt.notestodos.data
 
 import android.content.ContentResolver
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.pdf.PdfDocument
@@ -93,14 +94,27 @@ class RecipeFiles(
         }
 
     private fun imageToPdf(resolver: ContentResolver, uri: Uri, target: File) {
-        // Downsample anything over ~4000px on the long edge (matches image-to-pdf.js).
+        // Same long-edge limit as iOS's ImageToPDF: plenty for reading and OCR, and it keeps
+        // the PDF well inside the Worker's upload cap.
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, bounds) }
         var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_IMAGE_EDGE_PX) sample *= 2
+        while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= MAX_IMAGE_EDGE_PX) sample *= 2
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
-        val bitmap = resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, opts) }
+        val decoded = resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, opts) }
             ?: throw IllegalArgumentException("Could not decode image")
+        val longEdge = maxOf(decoded.width, decoded.height)
+        val bitmap = if (longEdge > MAX_IMAGE_EDGE_PX) {
+            val scale = MAX_IMAGE_EDGE_PX.toFloat() / longEdge
+            Bitmap.createScaledBitmap(
+                decoded,
+                (decoded.width * scale).toInt().coerceAtLeast(1),
+                (decoded.height * scale).toInt().coerceAtLeast(1),
+                true,
+            ).also { if (it !== decoded) decoded.recycle() }
+        } else {
+            decoded
+        }
         try {
             val document = PdfDocument()
             try {
@@ -118,6 +132,6 @@ class RecipeFiles(
     }
 
     private companion object {
-        const val MAX_IMAGE_EDGE_PX = 4000
+        const val MAX_IMAGE_EDGE_PX = 2200
     }
 }

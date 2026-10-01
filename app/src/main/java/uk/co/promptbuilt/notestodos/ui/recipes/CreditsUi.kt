@@ -135,12 +135,21 @@ fun PaywallDialog(opsStore: OpsStore, onClose: () -> Unit) {
                         Spacer(Modifier.width(12.dp))
                         Text("Loading packs…", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    state.products.isEmpty() -> Text(
-                        "The credit packs are not available right now. Check your connection and try again later.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 8.dp),
-                    )
+                    state.products.isEmpty() -> Column(modifier = Modifier.padding(top = 8.dp)) {
+                        Text(
+                            "The credit packs are not available right now. Check your connection and try again later.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        state.unavailableReason?.let {
+                            Text(
+                                it,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
                     else -> state.products.forEach { product ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,

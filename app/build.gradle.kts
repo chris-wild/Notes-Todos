@@ -17,8 +17,8 @@ android {
         applicationId = "uk.co.promptbuilt.hobpad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.4.1"
     }
 
     // Play upload key, configured in ~/.gradle/gradle.properties (never in the repo), as RiderNav does

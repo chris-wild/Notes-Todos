@@ -35,6 +35,8 @@ data class OpsState(
     val purchased: Boolean = false,
     val purchasing: Boolean = false,
     val message: String? = null,
+    /** Google Play's own reason when no packs load, shown under the paywall's notice. */
+    val unavailableReason: String? = null,
 ) {
     /** Accounts holding purchased credits name photographs without the daily cap. */
     val namingExempt: Boolean get() = purchased && (balance ?: 0) > 0
@@ -79,7 +81,9 @@ class OpsStore(
                     }
                 } else {
                     Log.w(TAG, "billing setup failed: ${result.responseCode} ${result.debugMessage}")
-                    _state.update { it.copy(productsLoaded = true) }
+                    _state.update {
+                        it.copy(productsLoaded = true, unavailableReason = "Google Play billing setup: code ${result.responseCode}")
+                    }
                 }
             }
 
@@ -117,19 +121,22 @@ class OpsStore(
                 },
             )
             .build()
-        val loaded = suspendCancellableCoroutine { cont ->
+        val (loaded, reason) = suspendCancellableCoroutine { cont ->
             billing.queryProductDetailsAsync(params) { result, details ->
                 if (result.responseCode != BillingClient.BillingResponseCode.OK) {
                     Log.w(TAG, "product query failed: ${result.responseCode} ${result.debugMessage}")
                 }
-                cont.resume(details.productDetailsList)
+                val unfetched = details.unfetchedProductList.joinToString { "${it.productId.substringAfterLast('.')}=${it.statusCode}" }
+                val reason = "Google Play code ${result.responseCode}" + if (unfetched.isEmpty()) "" else ", unavailable: $unfetched"
+                cont.resume(details.productDetailsList to reason)
             }
         }
-        Log.i(TAG, "products: requested ${PACK_CREDITS.size}, got ${loaded.size} ${loaded.map { it.productId }}")
+        Log.i(TAG, "products: requested ${PACK_CREDITS.size}, got ${loaded.size} ${loaded.map { it.productId }}; $reason")
         _state.update {
             it.copy(
                 products = loaded.sortedBy { p -> p.oneTimePurchaseOfferDetails?.priceAmountMicros ?: 0 },
                 productsLoaded = true,
+                unavailableReason = if (loaded.isEmpty()) reason else null,
             )
         }
     }
