@@ -29,6 +29,7 @@ private struct RecipesContent: View {
     @State private var settingsOpen = false
     @State private var cameraOpen = false
     @State private var cameraFallbackItem: PhotosPickerItem?
+    @State private var manualName = ""
 
     var body: some View {
         NavigationStack {
@@ -123,6 +124,25 @@ private struct RecipesContent: View {
                     }
                     cameraFallbackItem = nil
                 }
+            }
+            // Capture past the daily auto-name budget, or a failed naming call: the photo
+            // is saved under a date-stamped name, and this dialog asks for the real one
+            // (Cancel keeps the date name — a captured photo is never lost).
+            .alert(
+                model.pendingName?.reason == .dailyLimit ? "Daily naming limit reached" : "Name this recipe",
+                isPresented: Binding(get: { model.pendingName != nil }, set: { if !$0 { model.pendingName = nil } }),
+                presenting: model.pendingName,
+            ) { pending in
+                TextField("Recipe name", text: $manualName)
+                Button("Save") {
+                    model.rename(recipeId: pending.recipeId, to: manualName)
+                    manualName = ""
+                }
+                Button("Cancel", role: .cancel) { manualName = "" }
+            } message: { pending in
+                Text(pending.reason == .dailyLimit
+                     ? "HobPad has named 30 photographs today, so automatic naming is resting until tomorrow. The photo is saved. Type a name for this recipe."
+                     : "The photo is saved, but automatic naming did not work this time. Type a name for this recipe.")
             }
             // An alert, not a confirmationDialog: iOS 26 renders dialogs without the
             // automatic Cancel button they used to get (Chris's report, Sept 30).

@@ -17,6 +17,64 @@ final class RecipesModel {
     /// Set when an extraction needs more credits than remain; the viewer opens the paywall.
     var paywallNeeded = false
 
+    /// A captured recipe waiting for the user to type its name: automatic naming is
+    /// capped per day (each title call costs real money server-side), and can also
+    /// simply fail. Either way the photo is already saved; the dialog just names it.
+    struct PendingName: Identifiable {
+        enum Reason { case dailyLimit, namingFailed }
+        let recipeId: Int64
+        let reason: Reason
+        var id: Int64 { recipeId }
+    }
+
+    var pendingName: PendingName?
+
+    /// Client-side auto-naming budget: 30 per local day, mirroring the Worker's
+    /// TITLE_DAILY_LIMIT (backend/ops/wrangler.toml) — the server cap is the abuse
+    /// backstop, this counter is the UX that avoids ever hitting it mid-flow.
+    private static let autoNameDailyLimit = 30
+
+    private static func dayStamp() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    private func autoNameAllowed() -> Bool {
+        let d = UserDefaults.standard
+        if d.string(forKey: "autoNameDay") != Self.dayStamp() { return true }
+        return d.integer(forKey: "autoNameCount") < Self.autoNameDailyLimit
+    }
+
+    private func countAutoName() {
+        let d = UserDefaults.standard
+        if d.string(forKey: "autoNameDay") != Self.dayStamp() {
+            d.set(Self.dayStamp(), forKey: "autoNameDay")
+            d.set(0, forKey: "autoNameCount")
+        }
+        d.set(d.integer(forKey: "autoNameCount") + 1, forKey: "autoNameCount")
+    }
+
+    /// "Photographed 1 Oct 2026", with " (2)", " (3)"… when that name already exists —
+    /// the no-API name a capture keeps until the model or the user supplies a real one.
+    private func photographedFallbackName() -> String {
+        let f = DateFormatter()
+        f.dateFormat = "d MMM yyyy"
+        let base = "Photographed \(f.string(from: Date()))"
+        let names = Set(recipes.map(\.name))
+        if !names.contains(base) { return base }
+        var n = 2
+        while names.contains("\(base) (\(n))") { n += 1 }
+        return "\(base) (\(n))"
+    }
+
+    /// The manual-name dialog's Save: a blank name keeps the date-stamped fallback.
+    func rename(recipeId: Int64, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        Task { try? await core.recipesRepository.update(id: recipeId, name: trimmed, notes: "") }
+    }
+
     init(core: CoreServices, ops: OpsStore) {
         self.core = core
         self.ops = ops
@@ -169,16 +227,21 @@ final class RecipesModel {
             do {
                 let fileName = try storePdf(pdf)
                 let recipeId = try await core.recipesRepository
-                    .create(name: "Photographed recipe", notes: "").int64Value
+                    .create(name: photographedFallbackName(), notes: "").int64Value
                 _ = try await core.recipesRepository.addAttachment(
                     recipeId: recipeId, fileName: fileName, originalName: "photo.jpg",
                 )
+                guard autoNameAllowed() else {
+                    pendingName = PendingName(recipeId: recipeId, reason: .dailyLimit)
+                    return
+                }
                 working = "Naming recipe…"
+                countAutoName()
                 if let title = try await core.extractRecipeTitle(pdfData: pdf) {
                     try await core.recipesRepository.update(id: recipeId, name: title, notes: "")
                     message = "Recipe \"\(title)\" created from photo"
                 } else {
-                    message = "Recipe created from photo"
+                    pendingName = PendingName(recipeId: recipeId, reason: .namingFailed)
                 }
             } catch {
                 message = "Could not create recipe: \(error.localizedDescription)"

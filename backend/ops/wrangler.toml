@@ -36,4 +36,4 @@ ALLOWED_ENVIRONMENTS = "Production,Sandbox"
 PRODUCT_CREDITS = '{"uk.co.promptbuilt.hobpad.ops50":50,"uk.co.promptbuilt.hobpad.ops100":100,"uk.co.promptbuilt.hobpad.ops500":500}'
 FREE_OPS = "5"
 MAX_PDF_BYTES = "15728640"
-TITLE_DAILY_LIMIT = "20"
+TITLE_DAILY_LIMIT = "30"
