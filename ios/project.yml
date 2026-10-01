@@ -53,7 +53,11 @@ targets:
     type: application
     platform: iOS
     sources:
+      # Products.storekit is a TEST fixture (UI tests + Debug scheme runs); shipping
+      # it in the app bundle leaks pricing config to anyone unzipping the IPA.
       - path: HobPad
+        excludes:
+          - "Store/Products.storekit"
     # Explicit Info.plist (XcodeGen-generated from these properties): the
     # INFOPLIST_KEY_ build-setting route silently dropped UIFileSharingEnabled,
     # which hides the app's Documents from the Files app and the import picker.

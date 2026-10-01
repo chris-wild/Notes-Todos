@@ -1,6 +1,11 @@
 import Foundation
 import Observation
+import OSLog
 import StoreKit
+
+extension Logger {
+    static let store = Logger(subsystem: "uk.co.promptbuilt.hobpad", category: "store")
+}
 
 /// StoreKit 2 consumable credit packs. The crediting contract: a transaction is finished
 /// ONLY after the Worker has answered 2xx (idempotent by transaction id, so a lost
@@ -31,18 +36,30 @@ final class OpsStore {
         started = true
         Task { await self.loadProducts() }
         Task { await self.refreshBalance() }
+        // The updates listener must start immediately — chaining it after the
+        // unfinished drain left a window at launch where an Ask to Buy approval
+        // or App Store purchase would be missed until the next launch.
+        Task {
+            for await result in Transaction.updates { await self.submit(result) }
+        }
         Task {
             for await result in Transaction.unfinished { await self.submit(result) }
-            for await result in Transaction.updates { await self.submit(result) }
         }
     }
 
     func loadProducts() async {
+        let requested = Self.packCredits.keys.sorted()
         do {
-            let loaded = try await Product.products(for: Self.packCredits.keys.sorted())
+            let loaded = try await Product.products(for: requested)
             products = loaded.sorted { $0.price < $1.price }
+            message = nil
+            // An empty or partial SUCCESS means the App Store answered with no
+            // matching metadata — an ASC/propagation issue, not a network one.
+            // Keep the evidence in the log (requested vs returned).
+            Logger.store.info("products: requested \(requested.count) [\(requested.joined(separator: ","))], got \(loaded.count) [\(loaded.map(\.id).joined(separator: ","))]")
         } catch {
             message = "Could not load the credit packs: \(error.localizedDescription)"
+            Logger.store.error("products request failed: \(error.localizedDescription)")
         }
         productsLoaded = true
     }
