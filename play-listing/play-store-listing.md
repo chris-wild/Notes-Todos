@@ -39,7 +39,11 @@ Your data lives on your device and in your own Google backup. Recipe content lea
 
 **Privacy policy URL:** https://hobpad.app/privacy.html, after the Google Play section drafted in `site/privacy.html` is deployed.
 
-**Graphics still to produce:** 512 by 512 icon (from the existing app icon), 1024 by 500 feature graphic, and at least two phone screenshots. Play requires screenshots no more than twice as tall as they are wide, so they cannot be taken at the OnePlus's or the emulator's current shape without a size change.
+**Graphics:** ready in `play-listing/graphics/` and `play-listing/screenshots/`, for review.
+
+- `icon-512.png`, the app icon at 512 by 512.
+- `feature-graphic.png`, 1024 by 500, in the hobpad.app paper, ink and herb-green style with the site's fonts. Its source is `feature-graphic.html`.
+- Four phone screenshots at 1080 by 1920, matching the four iOS App Store screenshots: the recipe list, the open Penne alla Carbonara recipe, the ingredient list dialog, and the resulting shopping list. They were taken on the emulator from a copy of Chris's data, in UK English and the light theme, with the "Holondaise" and "Spagette" typos corrected and personal todo categories removed. Play limits screenshots to a 2:1 shape, so the emulator was set to 1080 by 1920 for them.
 
 ## App content declarations
 

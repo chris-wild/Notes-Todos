@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,8 +97,17 @@ fun TodosScreen() {
 
         // Category tab strip (port of TodosTab.js:31-66): active non-default
         // categories carry a remove affordance; "+" opens the add row.
+        // Keep the selected category in view, so a list opened from a recipe shows its chip.
+        val chipStrip = rememberLazyListState()
+        LaunchedEffect(state.activeCategory, state.categories) {
+            val index = state.categories.indexOfFirst {
+                CategoryRules.normalize(it) == CategoryRules.normalize(state.activeCategory)
+            }
+            if (index >= 0) chipStrip.animateScrollToItem(index)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             LazyRow(
+                state = chipStrip,
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
