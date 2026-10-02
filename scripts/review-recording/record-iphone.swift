@@ -53,7 +53,10 @@ final class Recorder: NSObject, AVCaptureFileOutputRecordingDelegate {
     let output = AVCaptureMovieFileOutput()
     var finished = false
     func fileOutput(_ o: AVCaptureFileOutput, didFinishRecordingTo url: URL, from c: [AVCaptureConnection], error: Error?) {
-        if let error { print("Recording ended: \(error.localizedDescription)") }
+        if let error {
+            let e = error as NSError
+            print("Recording ended: \(e.localizedDescription) (\(e.domain) \(e.code)) \(e.userInfo[NSUnderlyingErrorKey] ?? "")")
+        }
         print("Saved \(url.path)")
         finished = true
     }
@@ -67,6 +70,11 @@ do {
     }
     recorder.session.addInput(input)
     recorder.session.addOutput(recorder.output)
+    // The iPhone also offers a closed-caption stream, which stops the movie file after half a second.
+    for connection in recorder.output.connections
+    where !connection.inputPorts.contains(where: { $0.mediaType == .video || $0.mediaType == .audio }) {
+        connection.isEnabled = false
+    }
 } catch {
     print("Could not open the iPhone screen: \(error.localizedDescription)"); exit(1)
 }

@@ -10,7 +10,7 @@ Apple's Guideline 2.1 information request (2 October 2026) asks for a screen rec
 
 ## Recording
 
-Claude runs the recorder. The first run shows a macOS prompt asking to allow camera access; choose Allow. macOS treats a cabled iPhone's screen as a camera.
+Claude runs the recorder in Terminal, because macOS treats a cabled iPhone's screen as a camera and only Terminal can show the camera permission prompt. Terminal already has camera access on Chris's Mac. When recording starts, the iPhone may ask whether a pair of headphones is being connected. Tap Other Device before the take begins, so the prompt does not appear in the recording.
 
 ```
 swiftc -O scripts/review-recording/record-iphone.swift -o /tmp/record-iphone
