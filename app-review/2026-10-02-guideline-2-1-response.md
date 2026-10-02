@@ -62,7 +62,9 @@ The purchase screen can be reached in three ways:
 
 ## Notes for Chris (not for Apple)
 
-**Recording shot list.** Record on your iPhone with Screen Recording in Control Centre, microphone off. About two to three minutes is enough.
+**Recording.** Recorded on the spare iPhone 11 Pro from the Mac over the cable, with no personal data on the phone. The steps and shot list are in `scripts/review-recording/README.md`. About two to three minutes is enough.
+
+Shot list, for reference:
 
 1. Start on the Home Screen and launch HobPad.
 2. Recipes tab. Tap the camera and photograph a printed recipe. Wait for the automatic name.
@@ -72,6 +74,6 @@ The purchase screen can be reached in three ways:
 6. Recipes tab, gear button. Show the credits and the units setting.
 7. Tap Buy credits and buy the 50 pack. A TestFlight install of build 26 makes this a sandbox purchase with no charge. Show the balance rising by 50.
 
-**Privacy.** The recording goes to Apple. Your real notes include passwords and other personal details, so keep the Notes tab to the new note in step 5 (search for its title first, so nothing else shows), and avoid scrolling your recipe and todo lists more than needed.
+**Privacy.** The recording goes to Apple. The iPhone 11 Pro holds none of your notes, which is why it is used rather than your own phone.
 
 **Where it goes.** Apple wants the answers in two places: a reply in the App Review section of App Store Connect, with the recording attached, and the Notes field of App Review Information. The App Store Connect API cannot send the Resolution Center reply, so that needs the web page. The Notes field can be set through the API.
