@@ -191,7 +191,7 @@ fun PaywallDialog(opsStore: OpsStore, onClose: () -> Unit) {
 }
 
 /**
- * Past the daily naming budget, or when naming fails, the photo is already saved under a
+ * Past the daily naming budget, or when naming fails, the recipe is already saved under a
  * date-stamped name and this asks for the real one. Cancel keeps the date name.
  */
 @Composable
@@ -210,10 +210,10 @@ fun NameRecipeDialog(
                 Text(
                     if (dailyLimit) {
                         "Automatic naming has reached today's limit of ${AppPrefs.AUTO_NAME_DAILY_LIMIT}. " +
-                            "The photo is saved. Type a name now, cancel and rename it later, or buy a " +
+                            "The recipe is saved. Type a name now, cancel and rename it later, or buy a " +
                             "credit pack. There is no daily limit while you have purchased credits."
                     } else {
-                        "The photo is saved, but automatic naming did not work this time. Type a name for this recipe."
+                        "The recipe is saved, but automatic naming did not work this time. Type a name for this recipe."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                 )

@@ -44,7 +44,7 @@ data class RecipesUiState(
 
 /**
  * Automatic naming is budgeted (each call costs money server-side) and can fail; either way the
- * photo is already saved under a date-stamped name, and this asks for the real one.
+ * recipe is already saved under a date-stamped name, and this asks for the real one.
  */
 data class PendingName(val recipeId: Long, val reason: Reason) {
     enum class Reason { DAILY_LIMIT, NAMING_FAILED }
@@ -125,6 +125,11 @@ class RecipesViewModel(
         recipeFiles.delete(imported.fileName)
     }
 
+    /**
+     * A new recipe saved with a blank name and at least one attachment is named automatically
+     * from its first attachment's first page, as a photographed one is. It is saved first under
+     * a date-stamped name, so nothing is lost if naming is over its daily limit or fails.
+     */
     fun saveRecipe(
         id: Long?,
         name: String,
@@ -133,13 +138,14 @@ class RecipesViewModel(
         removals: List<RecipeAttachmentEntity>,
         onDone: () -> Unit,
     ) {
-        if (name.isBlank()) {
-            message.value = "Recipe name is required"
+        val autoName = id == null && name.isBlank() && newAttachments.isNotEmpty()
+        if (name.isBlank() && !autoName) {
+            message.value = if (id == null) "Type a name, or attach a recipe to have it named" else "Recipe name is required"
             return
         }
         viewModelScope.launch {
             val recipeId = if (id == null) {
-                repository.create(name.trim(), notes)
+                repository.create(if (autoName) fallbackName("Added") else name.trim(), notes)
             } else {
                 repository.update(id, name.trim(), notes)
                 id
@@ -152,6 +158,13 @@ class RecipesViewModel(
                 repository.addAttachment(recipeId, imported.fileName, imported.originalName)
             }
             onDone()
+            if (autoName) {
+                try {
+                    nameAutomatically(recipeId, newAttachments.first().fileName, notes) { "Recipe \"$it\" added" }
+                } finally {
+                    working.value = null
+                }
+            }
         }
     }
 
@@ -171,28 +184,9 @@ class RecipesViewModel(
         viewModelScope.launch {
             working.value = "Creating recipe…"
             try {
-                val recipeId = repository.create(photographedFallbackName(), "")
+                val recipeId = repository.create(fallbackName("Photographed"), "")
                 repository.addAttachment(recipeId, imported.fileName, imported.originalName)
-
-                if (!usesByoKey() && !appPrefs.autoNameAllowed(opsStore.state.value.namingExempt)) {
-                    pendingName.value = PendingName(recipeId, PendingName.Reason.DAILY_LIMIT)
-                    return@launch
-                }
-                appPrefs.countAutoName()
-                working.value = "Naming recipe…"
-                val title = recipeFiles.read(imported.fileName)?.let { pdf ->
-                    try {
-                        ocr.extractRecipeTitle(pdf)
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-                if (title != null) {
-                    repository.update(recipeId, title, "")
-                    message.value = "Recipe \"$title\" created from photo"
-                } else {
-                    pendingName.value = PendingName(recipeId, PendingName.Reason.NAMING_FAILED)
-                }
+                nameAutomatically(recipeId, imported.fileName, notes = "") { "Recipe \"$it\" created from photo" }
             } catch (e: Exception) {
                 message.value = "Could not create recipe: ${e.message}"
             } finally {
@@ -217,9 +211,35 @@ class RecipesViewModel(
         pendingName.value = null
     }
 
-    /** "Photographed 1 Oct 2026", with " (2)", " (3)" and so on when that name is taken. */
-    private suspend fun photographedFallbackName(): String {
-        val base = "Photographed " + SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date())
+    /**
+     * Names a just-saved recipe from the first page of [fileName], within the daily budget.
+     * Past the budget, or if naming fails, the user types the name instead. [notes] are kept.
+     */
+    private suspend fun nameAutomatically(recipeId: Long, fileName: String, notes: String, done: (String) -> String) {
+        if (!usesByoKey() && !appPrefs.autoNameAllowed(opsStore.state.value.namingExempt)) {
+            pendingName.value = PendingName(recipeId, PendingName.Reason.DAILY_LIMIT)
+            return
+        }
+        appPrefs.countAutoName()
+        working.value = "Naming recipe…"
+        val title = recipeFiles.firstPageForNaming(fileName)?.let { pdf ->
+            try {
+                ocr.extractRecipeTitle(pdf)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (title != null) {
+            repository.update(recipeId, title, notes)
+            message.value = done(title)
+        } else {
+            pendingName.value = PendingName(recipeId, PendingName.Reason.NAMING_FAILED)
+        }
+    }
+
+    /** "Photographed 1 Oct 2026" or "Added 1 Oct 2026", with " (2)", " (3)" and so on when taken. */
+    private suspend fun fallbackName(prefix: String): String {
+        val base = "$prefix " + SimpleDateFormat("d MMM yyyy", Locale.getDefault()).format(Date())
         val names = repository.observeRecipes().first().map { it.name }.toSet()
         if (base !in names) return base
         var n = 2

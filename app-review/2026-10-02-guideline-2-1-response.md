@@ -8,7 +8,7 @@ Thank you for reviewing HobPad. The requested information follows, numbered as i
 
 **1. Screen recording**
 
-The attached recording was captured on an iPhone running the latest version of iOS. It begins at the Home Screen, launches HobPad and shows the typical flow: photographing a recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and buying a credit pack. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs stays on their own device.
+The attached recording was captured on an iPhone running the latest version of iOS. It begins at the Home Screen, launches HobPad and shows the typical flow: adding a recipe from a photograph of a printed recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and buying a credit pack. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs stays on their own device.
 
 **2. Purpose and target audience**
 
@@ -18,7 +18,7 @@ HobPad is for home cooks. It keeps recipes, notes and todo lists in one place. A
 
 No login, credentials or setup are needed. The app opens on the Recipes tab.
 
-1. Photograph a recipe. Tap the camera button at the top of the Recipes tab and photograph any printed recipe, for example a page from a cookbook or a printed web page. HobPad saves the photograph and names the recipe automatically. A recipe can also be added with the + button, attaching a PDF or an image from the device.
+1. Photograph a recipe. Tap the camera button at the top of the Recipes tab and photograph any printed recipe, for example a page from a cookbook or a printed web page. HobPad saves the photograph and names the recipe automatically. A recipe can also be added with the + button, attaching a PDF or an image from the device. If the name is left blank, HobPad names that recipe automatically as well.
 2. Create an ingredient list. Tap a recipe to open it, then tap Create ingredient list. Choose the quantity multiplier if wanted, then tap Create ingredient list. HobPad opens the Todos tab on the new list.
 3. Todos and Notes. The Todos tab holds lists in categories, and the Notes tab holds free-text notes. Neither needs any setup.
 4. Settings. The gear button on the Recipes tab shows the remaining conversion credits, the Buy credits button and the units preference.
@@ -28,7 +28,7 @@ Every new install receives five free conversion credits, so the conversion featu
 **4. External services**
 
 1. **HobPad conversion service.** Our own server, hosted on Cloudflare Workers (Cloudflare, Inc.). It keeps the conversion credit balance for each install, verifies In-App Purchase transactions, and passes recipe pages to the AI service below. It is reached only when a recipe is converted or named, or when credits are checked or bought.
-2. **Anthropic Claude API (model Claude Haiku 4.5).** Called only by our server, never directly by the app. It reads the recipe page to extract the ingredients and to suggest a name for a photographed recipe. The recipe page is sent for that request only.
+2. **Anthropic Claude API (model Claude Haiku 4.5).** Called only by our server, never directly by the app. It reads the recipe page to extract the ingredients and to suggest a name for a new recipe. For naming, only the first page of the recipe is sent. The recipe page is sent for that request only.
 3. **Apple In-App Purchase (StoreKit 2)** for the credit packs, with App Store Server Notifications so that refunded packs are removed from the balance.
 4. **iCloud Keychain**, which stores an anonymous random identifier for the install, so that credits remain available after the app is reinstalled or moved to a new device.
 
@@ -50,7 +50,7 @@ HobPad sells three consumable packs of recipe conversion credits:
 - 100 conversions (£2.99 in the UK)
 - 500 conversions (£9.99 in the UK)
 
-One credit converts one recipe page, either a photograph or one page of a PDF, into an ingredient list. Converting a recipe that has already been converted is free. Credits never expire. Naming photographed recipes is free, up to 30 a day, with no daily limit while purchased credits remain.
+One credit converts one recipe page, either a photograph or one page of a PDF, into an ingredient list. Converting a recipe that has already been converted is free. Credits never expire. Automatic naming is free, up to 30 recipes a day, with no daily limit while purchased credits remain.
 
 The purchase screen can be reached in three ways:
 
@@ -62,17 +62,17 @@ The purchase screen can be reached in three ways:
 
 ## Notes for Chris (not for Apple)
 
-**Recording.** Recorded on the spare iPhone 11 Pro from the Mac over the cable, with no personal data on the phone. The steps and shot list are in `scripts/review-recording/README.md`. About two to three minutes is enough.
+**Recording.** Recorded on the spare iPhone 11 Pro from the Mac over the cable, with no personal data on the phone. Its camera does not work, so the recipe is added with + then Attach image, from a photograph already in Photos, with the name left blank so that HobPad names it. Naming a blank-named recipe arrives in build 27, so build 27 must be uploaded and chosen for version 1.0.1 before recording. Section 3 still tells the reviewer how to use the camera. The steps and shot list are in `scripts/review-recording/README.md`. About two to three minutes is enough.
 
 Shot list, for reference:
 
 1. Start on the Home Screen and launch HobPad.
-2. Recipes tab. Tap the camera and photograph a printed recipe. Wait for the automatic name.
+2. Recipes tab. Tap +, leave the name blank, tap Attach image, choose the recipe photograph, and tap Save. Wait for the automatic name.
 3. Open the recipe. Show the page, then tap Create ingredient list, set the multiplier to 2 and create the list. Show the new list opening in the Todos tab and tick one item.
 4. Go back to the recipe and tap Create ingredient list again, to show that a re-run is free.
 5. Notes tab. Create a short note and open it.
 6. Recipes tab, gear button. Show the credits and the units setting.
-7. Tap Buy credits and buy the 50 pack. A TestFlight install of build 26 makes this a sandbox purchase with no charge. Show the balance rising by 50.
+7. Tap Buy credits and buy the 50 pack. A TestFlight install of build 27 makes this a sandbox purchase with no charge. Show the balance rising by 50.
 
 **Privacy.** The recording goes to Apple. The iPhone 11 Pro holds none of your notes, which is why it is used rather than your own phone.
 

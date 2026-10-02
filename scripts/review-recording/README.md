@@ -4,9 +4,9 @@ Apple's Guideline 2.1 information request (2 October 2026) asks for a screen rec
 
 ## Before the session
 
-1. On the iPhone 11 Pro, sign in to the App Store with Chris's Apple ID, install TestFlight, and install HobPad from TestFlight. That is build 26, the build under review, and a credit pack bought in it is a free test purchase.
+1. On the iPhone 11 Pro, sign in to the App Store with Chris's Apple ID, install TestFlight, and install HobPad from TestFlight. That must be build 27 or later, the build chosen for review, because naming a recipe added with a blank name arrived in build 27, and a credit pack bought in it is a free test purchase.
 2. Connect the iPhone to the Mac by cable, unlock it, and tap Trust if asked.
-3. Have a printed recipe ready to photograph, with good light on it.
+3. Put a photograph of a printed recipe in Photos on the iPhone. The iPhone 11 Pro's camera does not work, so the recipe is attached from Photos rather than photographed.
 
 ## Recording
 
@@ -23,7 +23,7 @@ Recording stops with Ctrl-C, or after a number of seconds given as a second argu
 ## Shot list
 
 1. Start on the Home Screen and open HobPad.
-2. Recipes tab. Tap the camera and photograph the recipe. Wait for its name to appear.
+2. Recipes tab. Tap +, leave the name blank, tap Attach image, choose the recipe photograph, and tap Save. Wait for the automatic name.
 3. Open the recipe. Tap Create ingredient list, set the quantities to x2, and create the list. The Todos tab opens on the new list. Tick one item.
 4. Go back to the recipe and tap Create ingredient list again, to show that converting it again is free. Cancel.
 5. Notes tab. Add a short note and open it.

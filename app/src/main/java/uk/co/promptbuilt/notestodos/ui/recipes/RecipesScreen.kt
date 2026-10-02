@@ -408,6 +408,11 @@ private fun RecipeForm(
                 .fillMaxWidth()
                 .padding(top = 8.dp),
             placeholder = { Text("Recipe name") },
+            supportingText = if (initial == null && name.isBlank()) {
+                { Text("Leave blank to have it named from the attached recipe.") }
+            } else {
+                null
+            },
             singleLine = true,
         )
         OutlinedTextField(

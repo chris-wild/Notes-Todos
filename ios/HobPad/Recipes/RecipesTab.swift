@@ -128,7 +128,7 @@ private struct RecipesContent: View {
             }
             // Capture past the daily auto-name budget, or a failed naming call: the photo
             // is saved under a date-stamped name, and this dialog asks for the real one
-            // (Cancel keeps the date name — a captured photo is never lost).
+            // (Cancel keeps the date name — a saved recipe is never lost).
             .alert(
                 model.pendingName?.reason == .dailyLimit ? "Daily naming limit reached" : "Name this recipe",
                 isPresented: Binding(get: { model.pendingName != nil }, set: { if !$0 { model.pendingName = nil } }),
@@ -148,8 +148,8 @@ private struct RecipesContent: View {
                 Button("Cancel", role: .cancel) { manualName = "" }
             } message: { pending in
                 Text(pending.reason == .dailyLimit
-                     ? "Automatic naming has reached today's limit of 30. The photo is saved. Type a name now, cancel and rename it later, or buy a credit pack. There is no daily limit while you have purchased credits."
-                     : "The photo is saved, but automatic naming did not work this time. Type a name for this recipe.")
+                     ? "Automatic naming has reached today's limit of 30. The recipe is saved. Type a name now, cancel and rename it later, or buy a credit pack. There is no daily limit while you have purchased credits."
+                     : "The recipe is saved, but automatic naming did not work this time. Type a name for this recipe.")
             }
             .sheet(isPresented: $creditsOpen) {
                 PaywallSheet(ops: model.ops)
@@ -445,7 +445,13 @@ private struct RecipeEditorSheet: View {
         let existing = recipe.map { model.attachments(for: $0) } ?? []
         NavigationStack {
             Form {
-                TextField("Recipe name", text: $name)
+                Section {
+                    TextField("Recipe name", text: $name)
+                } footer: {
+                    if recipe == nil && name.trimmingCharacters(in: .whitespaces).isEmpty {
+                        Text("Leave blank to have it named from the attached recipe.")
+                    }
+                }
                 TextField("Recipe notes (optional)…", text: $notes, axis: .vertical)
                     .lineLimit(4...12)
 
@@ -498,6 +504,8 @@ private struct RecipeEditorSheet: View {
                         )
                         dismiss()
                     }
+                    // Blank is allowed only for a new recipe with an attachment, which is named for you.
+                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty && (recipe != nil || pending.isEmpty))
                 }
             }
             .fileImporter(isPresented: $pdfPickerOpen, allowedContentTypes: [.pdf]) { result in

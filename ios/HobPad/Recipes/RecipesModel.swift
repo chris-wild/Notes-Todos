@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Observation
+import PDFKit
 import HobPadCore
 
 @Observable @MainActor
@@ -17,9 +18,9 @@ final class RecipesModel {
     /// Set when an extraction needs more credits than remain; the viewer opens the paywall.
     var paywallNeeded = false
 
-    /// A captured recipe waiting for the user to type its name: automatic naming is
+    /// A recipe waiting for the user to type its name: automatic naming is
     /// capped per day (each title call costs real money server-side), and can also
-    /// simply fail. Either way the photo is already saved; the dialog just names it.
+    /// simply fail. Either way the recipe is already saved; the dialog just names it.
     struct PendingName: Identifiable {
         enum Reason { case dailyLimit, namingFailed }
         let recipeId: Int64
@@ -59,12 +60,12 @@ final class RecipesModel {
         d.set(d.integer(forKey: "autoNameCount") + 1, forKey: "autoNameCount")
     }
 
-    /// "Photographed 1 Oct 2026", with " (2)", " (3)"… when that name already exists —
-    /// the no-API name a capture keeps until the model or the user supplies a real one.
-    private func photographedFallbackName() -> String {
+    /// "Photographed 1 Oct 2026" or "Added 1 Oct 2026", with " (2)", " (3)"… when that name
+    /// already exists — the no-API name a recipe keeps until the model or the user supplies a real one.
+    private func fallbackName(_ prefix: String) -> String {
         let f = DateFormatter()
         f.dateFormat = "d MMM yyyy"
-        let base = "Photographed \(f.string(from: Date()))"
+        let base = "\(prefix) \(f.string(from: Date()))"
         let names = Set(recipes.map(\.name))
         if !names.contains(base) { return base }
         var n = 2
@@ -76,7 +77,10 @@ final class RecipesModel {
     func rename(recipeId: Int64, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        Task { try? await core.recipesRepository.update(id: recipeId, name: trimmed, notes: "") }
+        Task {
+            let notes = (try? await core.recipesRepository.getById(id: recipeId))?.notes ?? ""
+            try? await core.recipesRepository.update(id: recipeId, name: trimmed, notes: notes)
+        }
     }
 
     init(core: CoreServices, ops: OpsStore) {
@@ -174,8 +178,12 @@ final class RecipesModel {
         newAttachments: [(data: Data, originalName: String)],
         removals: [RecipeAttachmentEntity],
     ) {
-        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else {
-            message = "Recipe name is required"
+        // A new recipe saved with a blank name and an attachment is named automatically from
+        // its first attachment's first page, as a photographed one is. A typed name is kept.
+        let blank = name.trimmingCharacters(in: .whitespaces).isEmpty
+        let autoName = id == nil && blank && !newAttachments.isEmpty
+        guard !blank || autoName else {
+            message = id == nil ? "Type a name, or attach a recipe to have it named" : "Recipe name is required"
             return
         }
         Task {
@@ -185,7 +193,8 @@ final class RecipesModel {
                     try await core.recipesRepository.update(id: id, name: name, notes: notes)
                     recipeId = id
                 } else {
-                    recipeId = try await core.recipesRepository.create(name: name, notes: notes).int64Value
+                    recipeId = try await core.recipesRepository
+                        .create(name: autoName ? fallbackName("Added") : name, notes: notes).int64Value
                 }
                 for removal in removals {
                     core.recipeStore.delete(fileName: removal.fileName)
@@ -196,6 +205,12 @@ final class RecipesModel {
                     _ = try await core.recipesRepository.addAttachment(
                         recipeId: recipeId, fileName: fileName, originalName: attachment.originalName,
                     )
+                }
+                if autoName, let first = newAttachments.first {
+                    defer { working = nil }
+                    await nameAutomatically(recipeId: recipeId, pdf: first.data, notes: notes) {
+                        "Recipe \"\($0)\" added"
+                    }
                 }
             } catch {
                 message = "Save failed: \(error.localizedDescription)"
@@ -231,26 +246,47 @@ final class RecipesModel {
             do {
                 let fileName = try storePdf(pdf)
                 let recipeId = try await core.recipesRepository
-                    .create(name: photographedFallbackName(), notes: "").int64Value
+                    .create(name: fallbackName("Photographed"), notes: "").int64Value
                 _ = try await core.recipesRepository.addAttachment(
                     recipeId: recipeId, fileName: fileName, originalName: "photo.jpg",
                 )
-                guard autoNameAllowed() else {
-                    pendingName = PendingName(recipeId: recipeId, reason: .dailyLimit)
-                    return
-                }
-                working = "Naming recipe…"
-                countAutoName()
-                if let title = try await core.extractRecipeTitle(pdfData: pdf) {
-                    try await core.recipesRepository.update(id: recipeId, name: title, notes: "")
-                    message = "Recipe \"\(title)\" created from photo"
-                } else {
-                    pendingName = PendingName(recipeId: recipeId, reason: .namingFailed)
+                await nameAutomatically(recipeId: recipeId, pdf: pdf, notes: "") {
+                    "Recipe \"\($0)\" created from photo"
                 }
             } catch {
                 message = "Could not create recipe: \(error.localizedDescription)"
             }
         }
+    }
+
+    /// Names a just-saved recipe from the first page of [pdf], within the daily budget. Past
+    /// the budget, or if naming fails, the user types the name instead. [notes] are kept.
+    private func nameAutomatically(
+        recipeId: Int64, pdf: Data, notes: String, done: (String) -> String,
+    ) async {
+        guard autoNameAllowed() else {
+            pendingName = PendingName(recipeId: recipeId, reason: .dailyLimit)
+            return
+        }
+        working = "Naming recipe…"
+        countAutoName()
+        if let title = try? await core.extractRecipeTitle(pdfData: Self.firstPage(of: pdf)),
+           (try? await core.recipesRepository.update(id: recipeId, name: title, notes: notes)) != nil {
+            message = done(title)
+        } else {
+            pendingName = PendingName(recipeId: recipeId, reason: .namingFailed)
+        }
+    }
+
+    /// What automatic naming sends: a one-page PDF as it is, otherwise its first page alone.
+    /// A recipe's name is on its first page, and sending a long PDF whole would cost far more
+    /// for the same answer.
+    private static func firstPage(of pdf: Data) -> Data {
+        guard let document = PDFDocument(data: pdf), document.pageCount > 1,
+              let page = document.page(at: 0)?.copy() as? PDFPage else { return pdf }
+        let single = PDFDocument()
+        single.insert(page, at: 0)
+        return single.dataRepresentation() ?? pdf
     }
 
     func createIngredients(for recipe: RecipeEntity, multiplier: Int = 1, onSuccess: @escaping (String) -> Void) {

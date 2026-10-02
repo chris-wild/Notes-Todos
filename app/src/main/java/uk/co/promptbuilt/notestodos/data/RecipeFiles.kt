@@ -148,33 +148,55 @@ class RecipeFiles(
         if (oversized.isNotEmpty()) onChanged()
     }
 
+    /**
+     * What automatic naming sends: the file as it is when it has one page, otherwise its first
+     * page alone as a JPEG page. A recipe's name is on its first page, and sending a long PDF
+     * whole would cost far more for the same answer.
+     */
+    fun firstPageForNaming(fileName: String): ByteArray? = runCatching {
+        val file = fileFor(fileName)
+        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+            PdfRenderer(pfd).use { renderer ->
+                when {
+                    renderer.pageCount == 0 -> null
+                    renderer.pageCount == 1 -> file.readBytes()
+                    else -> {
+                        val page = renderer.openPage(0).use(::jpegPageOf)
+                        java.io.ByteArrayOutputStream().also { JpegPdf.write(listOf(page), it) }.toByteArray()
+                    }
+                }
+            }
+        }
+    }.getOrNull()
+
     private fun compact(file: File): ByteArray? =
         ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
             PdfRenderer(pfd).use { renderer ->
                 if (renderer.pageCount == 0 || renderer.pageCount > COMPACT_MAX_PAGES) return null
-                val pages = (0 until renderer.pageCount).map { index ->
-                    renderer.openPage(index).use { page ->
-                        val fit = minOf(1f, MAX_IMAGE_EDGE_PX.toFloat() / maxOf(page.width, page.height))
-                        val pageWidth = page.width * fit
-                        val pageHeight = page.height * fit
-                        val bitmap = Bitmap.createBitmap(
-                            (pageWidth * 2).toInt().coerceAtLeast(1),
-                            (pageHeight * 2).toInt().coerceAtLeast(1),
-                            Bitmap.Config.ARGB_8888,
-                        )
-                        bitmap.eraseColor(android.graphics.Color.WHITE)
-                        val toBitmap = Matrix().apply { setScale(fit * 2, fit * 2) }
-                        page.render(bitmap, null, toBitmap, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        try {
-                            jpegPage(bitmap, pageWidth, pageHeight)
-                        } finally {
-                            bitmap.recycle()
-                        }
-                    }
-                }
+                val pages = (0 until renderer.pageCount).map { index -> renderer.openPage(index).use(::jpegPageOf) }
                 java.io.ByteArrayOutputStream().also { JpegPdf.write(pages, it) }.toByteArray()
             }
         }
+
+    /** A page redrawn as JPEG, at most 2200 points on the long edge and rasterised at twice that. */
+    private fun jpegPageOf(page: PdfRenderer.Page): JpegPdf.Page {
+        val fit = minOf(1f, MAX_IMAGE_EDGE_PX.toFloat() / maxOf(page.width, page.height))
+        val pageWidth = page.width * fit
+        val pageHeight = page.height * fit
+        val bitmap = Bitmap.createBitmap(
+            (pageWidth * 2).toInt().coerceAtLeast(1),
+            (pageHeight * 2).toInt().coerceAtLeast(1),
+            Bitmap.Config.ARGB_8888,
+        )
+        bitmap.eraseColor(android.graphics.Color.WHITE)
+        val toBitmap = Matrix().apply { setScale(fit * 2, fit * 2) }
+        page.render(bitmap, null, toBitmap, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        return try {
+            jpegPage(bitmap, pageWidth, pageHeight)
+        } finally {
+            bitmap.recycle()
+        }
+    }
 
     private fun jpegPage(bitmap: Bitmap, pageWidth: Float, pageHeight: Float): JpegPdf.Page {
         val jpeg = java.io.ByteArrayOutputStream().also {

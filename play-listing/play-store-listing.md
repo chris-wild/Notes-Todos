@@ -17,7 +17,7 @@ HobPad keeps recipes, notes and todo lists in one place, and turns recipes into 
 Photograph a recipe from a book or magazine, or import a PDF. HobPad stores it, names it, and files it with the rest of your collection. When you are ready to cook, one tap reads every page, merges repeated ingredients, and writes the shopping list into your todos. Cooking for more people? Scale the quantities before you convert.
 
 RECIPES
-Photograph paper recipes or import PDFs, with several pages per recipe. Photographed recipes are named automatically. Search your whole collection, and pinch to zoom into any page.
+Photograph paper recipes or import PDFs, with several pages per recipe. Recipes are named automatically from their first page unless you type a name. Search your whole collection, and pinch to zoom into any page.
 
 SHOPPING LISTS
 One tap turns a recipe into an ingredient list. Repeated ingredients are merged, so 3 garlic cloves for the sauce and 6 for the dish become 9 on the list. Quantities can be converted to metric or US units, and multiplied when cooking for a crowd. Lists arrive as todos, ready to tick off at the shop.
@@ -26,10 +26,10 @@ NOTES AND TODOS
 Simple notes with tappable links, and todo lists in categories you define.
 
 PRICING
-Notes, todos and recipe storage are free without limits. Photographed recipes are named automatically for free, up to 30 a day, with no daily limit while you hold purchased credits. Converting a recipe page into a shopping list uses one credit, and converting the same recipe again is free. New installs include five free credits, and further credits are sold in packs. Credits never expire.
+Notes, todos and recipe storage are free without limits. Automatic naming is free, up to 30 recipes a day, with no daily limit while you hold purchased credits. Converting a recipe page into a shopping list uses one credit, and converting the same recipe again is free. New installs include five free credits, and further credits are sold in packs. Credits never expire.
 
 PRIVACY
-Your data lives on your device and in your own Google backup. Recipe content leaves your device only when a photographed recipe is named or a recipe is converted, and our service does not keep it. Recipe file backup to your own Google Drive is optional. No accounts, no adverts, no tracking.
+Your data lives on your device and in your own Google backup. Recipe content leaves your device only when a recipe is named automatically or converted, and our service does not keep it. Recipe file backup to your own Google Drive is optional. No accounts, no adverts, no tracking.
 
 **Category:** Food & Drink (matches the App Store).
 
@@ -70,8 +70,8 @@ Google counts data as collected when it leaves the device for the developer's se
 
 | Data type (Google's category) | Collected | Ephemeral | Required or optional | Purpose | What it is in HobPad |
 |---|---|---|---|---|---|
-| Photos and videos: Photos | Yes | Yes | Optional | App functionality | A photographed recipe page, sent for automatic naming and for conversion |
-| Files and docs | Yes | Yes | Optional | App functionality | Recipe PDFs, sent only when the user converts them |
+| Photos and videos: Photos | Yes | Yes | Optional | App functionality | A photographed or attached recipe image, sent for automatic naming and for conversion |
+| Files and docs | Yes | Yes | Optional | App functionality | Recipe PDFs, whose first page is sent for automatic naming when no name is typed, and which are sent whole for conversion |
 | Financial info: Purchase history | Yes | No | Optional | App functionality | Google Play order numbers of credit packs, kept in the credit ledger so balances and refunds are correct |
 | Device or other IDs | Yes | No | Required | App functionality | The anonymous random identifier that the credit balance is kept against |
 
