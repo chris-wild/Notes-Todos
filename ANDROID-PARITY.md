@@ -1,10 +1,10 @@
 # Android parity plan
 
-Status as of 1 October 2026, 22:00. iOS version 1.0.1 (build 26) is waiting for App Store review. Android version 0.4.2 (version code 6) is live on the Google Play internal testing track for Chris only, and the first Google Play purchase has been proven end to end. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play. The next section lists what is left. The sections after it are the original plan, kept as the record of how the work was scoped, with status notes added where items have since been completed.
+Status as of 2 October 2026, 15:00. iOS version 1.0.1 is waiting for App Store review with build 27. It was resubmitted at 11:54 with a screen recording and written answers to Apple's information request (Guideline 2.1), and builds 28 and 29 are in TestFlight only. Android version 0.4.6 (version code 10) is live on the Google Play internal testing track for Chris only. As of iOS build 29 and Android 0.4.6 the two apps have the same features. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play. The next section lists what is left. The sections after it are the original plan, kept as the record of how the work was scoped, with status notes added where items have since been completed.
 
 ## What is left
 
-Every item below was checked on 1 October 2026 against the source, Play Console or the live Worker. Items are grouped by who can act on them.
+Every item below was checked on 2 October 2026 against the source, App Store Connect, Play Console, the connected OnePlus or the live Worker. Items are grouped by who can act on them.
 
 ### Built and proven
 
@@ -12,27 +12,35 @@ Every item below was checked on 1 October 2026 against the source, Play Console 
 2. Credit packs through Google Play Billing. The three packs exist in Play Console (`uk.co.promptbuilt.hobpad.ops50`, `ops100` and `ops500`, at £1.99, £2.99 and £9.99 in the UK including VAT), and a licence-test purchase was credited by the production Worker (see "First Google Play purchase" below).
 3. The daily naming allowance, the no-recipe naming fix and the Units setting.
 4. Recipe file backup to the Google Drive application data folder.
-5. The conversion flow, the fix for the crash when opening a photographed recipe, and full-screen pinch-to-zoom for recipe pages.
-6. Play Console foundations: the HobPad payments profile (organisation profile "HobPad", payouts to a bank account that Google was still verifying at the time of writing), enrolment in the 15% service fee, the purchase-verification service account, licence testing, and Android developer verification.
+5. The conversion flow, the fix for the crash when opening a photographed recipe, and pinch-to-zoom whose limits match iOS PDFView (0.25 to 5 times the page size).
+6. The seven behaviour gaps from the parity audit of 1 October (see "Parity audit" below), fixed in 0.4.4 and checked on the OnePlus through the side-by-side HobPad dev build.
+7. Photographs stored as JPEG pages turned upright from their EXIF orientation, and a compaction pass at launch that shrinks any stored PDF over 8 MB, as iOS does.
+8. New on both platforms on 2 October, in iOS builds 28 and 29 and Android 0.4.5 and 0.4.6:
+   1. A recipe added with + and a blank name is named automatically from its first attachment. Only the first page is sent, which was measured on the staging Worker at 143,900 bytes from iOS and 195,936 bytes from Android for a 19-page, 2.3 MB PDF. A typed name is kept and makes no naming call.
+   2. Delete All Notes at the foot of the Notes sort menu, behind a confirmation.
+   3. The Todos tab no longer has a search field.
+   4. Settings says that naming new recipes automatically is free.
+9. Play Console foundations: the HobPad payments profile, enrolment in the 15% service fee, the purchase-verification service account, licence testing, and Android developer verification.
+10. The privacy policy at hobpad.app now covers Google Play purchases and naming of recipes added without a name. It was deployed on 2 October.
 
-### Engineering work that can start now
+### Still to verify
 
-1. **Parity audit, 1 October 2026 (night).** A line-by-line comparison of every iOS and Android screen found six behaviour gaps: the pop-out showed one page only, the pop-out was not discoverable, there was no zoom inside the recipe viewer, long recipe notes were cut off in the viewer, opening a note went straight into editing so its links could not be tapped, and there was no light theme. A seventh was found while testing: long recipe notes pushed the Update Recipe button off the edit dialog. All seven are fixed in version 0.4.4 (commit 964c78f), verified on the emulator, and awaiting a test on the OnePlus and then upload. Three differences are deliberate and stay: Android's visible icons and inline add boxes in place of iOS swipe actions and + buttons, Export and Import backup in released Android builds, and the Drive recipe-file backup.
-2. **Superseded by 0.4.4.** Built (version code 7) and awaiting upload. It carries three changes, all verified on the emulator. The first is the units fix (commit 235664e), which stops Automatic units from crashing on Android 8.0 and 8.1; its Android 8 fallback has not been run on a device, because no Android 8 emulator is installed. The second is Todos Delete All, which asks for confirmation with Cancel and removes an emptied custom category, as iOS does. The third is Edit and Delete in the open recipe, plus an enlarge button in the corner of each recipe page, matching the iOS control, because tapping the page to enlarge it was not discoverable.
-3. **Light theme.** Done in 0.4.4.
-3. **Untested paths.** Three paths have not been exercised. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
-4. **Photo PDFs saved before 0.4.1.** Photographs taken with the earlier builds are stored at up to 4000 pixels. They display correctly now, but a one-off compaction pass, as iOS has, would shrink them. This is optional.
-5. **Native debug symbols.** Play warns on every upload that no debug symbol file is attached. This is optional and affects only crash reports.
+1. **0.4.6 on the OnePlus.** The Play copy of HobPad on the OnePlus was still 0.4.2 at 15:00. Update it from the Play Store, then check blank-name naming with a photo, Delete All Notes and the Todos tab.
+2. **Delete All Notes, run end to end.** The menu item and confirmation were checked on the iOS simulator and the Android emulator, cancelling each time. No real wipe has been run, because both test devices hold copies of Chris's notes.
+3. **Untested paths.** Three paths have not been exercised on Android. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
+4. **Android 8.0 and 8.1.** The fallback for Automatic units on these versions has not been run on a device, because no Android 8 emulator is installed.
 
 ### Decisions for Chris
 
-1. **Paywall diagnostic.** Since 0.4.1, when the credit packs cannot load, the paywall shows Google Play's response code under the message. It made the missing-packs problem diagnosable, but customers will also see it. The recommendation is to keep it, because it costs nothing and helps support.
-2. **D3, separate balances.** An iPhone and an Android phone hold separate credit balances. The recommendation remains to accept this and say so in the support FAQ, which does not yet mention it.
-3. **The hobpad.app website.** Whether it should mention Google Play before launch.
+1. **Paywall diagnostic.** When the credit packs cannot load, the Android paywall shows Google Play's response code under the message. The recommendation is to keep it, because it costs nothing and helps support.
+2. **D3, separate balances.** An iPhone and an Android phone hold separate credit balances. The support page at hobpad.app describes only iCloud Keychain. The recommendation is to accept separate balances and add an Android answer to the support FAQ.
+3. **The hobpad.app home page.** It does not mention Google Play. Decide whether it should before the Android launch.
+4. **Play listing answers** from `play-listing/play-store-listing.md`: the target audience (13 and over is recommended), the data deletion answer (No is recommended), and whether to publish a phone number.
+5. **The next iOS version.** Build 29 cannot reach the App Store until a new version is created after 1.0.1. That version should also carry three changes. The first is the corrected App Store description, which still says photography is free without limits and that recipe content is sent only for conversion. The second is the two replacement Todos screenshots in `app-store/screenshots/`. The third is the version number, which only Chris changes.
 
 ### Play Console store setup
 
-Play Console lists ten app content declarations still to complete: privacy policy, ads, sign-in details, content ratings, target audience and content, data safety, advertising ID, government apps, financial features and health apps. The store listing also needs an app category, contact details, a description adapted from the App Store text, a 512 pixel icon, a 1024 by 500 feature graphic and phone screenshots. The privacy policy must first describe Google Play purchases and the Android account identifier, because `site/privacy.html` does not yet mention Google Play.
+The draft in `play-listing/play-store-listing.md` covers the store listing, the ten app content declarations and the data safety answers, and the graphics and four phone screenshots are ready in `play-listing/`. None of it has been entered in Play Console yet. The privacy policy prerequisite is now met.
 
 ### Closed test and production access
 
@@ -45,15 +53,17 @@ On hold until Chris recruits HobPad testers. Google requires at least 12 testers
 
 ### Shared with iOS
 
-1. An iOS build carrying commit dd7122c, which makes iOS read naming replies through the shared title parser. The production Worker already protects the build in review, so this is not urgent.
-2. The App Review outcome for iOS 1.0.1. Release is manual and Chris decides when.
+1. The App Review outcome for iOS 1.0.1 with build 27. Build 27 already carries commit dd7122c, the shared title parser. Release is manual and Chris decides when.
 
 ### Housekeeping
 
-1. Turn Recipe file backup back on in the OnePlus's HobPad Settings, since the reinstall turned it off.
-2. Keep offline copies of `~/keystores/hobpad-upload.jks` and `~/keystores/hobpad-play-service-account.json`.
-3. Delete the two Google Cloud OAuth clients for the retired `uk.co.promptbuilt.notestodos` ID.
-4. Optionally, give the Cloudflare API token read access to Workers observability, so the Worker's request log can be checked without the phone.
+1. On the OnePlus, remove HobPad dev (`uk.co.promptbuilt.hobpad.dev`) once 0.4.6 has been checked, and turn Recipe file backup back on in HobPad's Settings.
+2. On the iPhone 11 Pro, install build 29 from TestFlight, which replaces the development build installed on 2 October, and delete the HobPadUITests runner app.
+3. The Android emulator is still set to 1080 by 1920 at density 420 for the Play screenshots. Reset it with `adb shell wm size reset` and `adb shell wm density reset` when the screenshots are final.
+4. Keep offline copies of `~/keystores/hobpad-upload.jks` and `~/keystores/hobpad-play-service-account.json`.
+5. Delete the two Google Cloud OAuth clients for the retired `uk.co.promptbuilt.notestodos` ID.
+6. Optionally, give the Cloudflare API token read access to Workers observability, so the Worker's request log can be checked without the phone.
+7. Optionally, upload native debug symbols. Play warns on every upload that none are attached, but the AndroidX native libraries ship already stripped, so this is not currently possible.
 
 ### After launch
 
@@ -283,3 +293,9 @@ Phase 0 starts immediately because its waits are fixed. Phase 1 and the Worker h
 The Play billing chain is proven end to end on Chris's OnePlus. Chris bought the 50-credit pack as a licence tester from the internal-testing build (0.4.2). Google recorded order GPA.3358-4385-8365-92846 as a test purchase in the PROCESSED state. The Play Developer API, queried with the HobPad service account, reports the purchase as consumed and acknowledged, which the app does only after the production Worker has answered 2xx. The production Worker reports the purchasing account at a balance of 54 credits with the purchased flag set, which is the 5 free credits plus the 50 purchased, less 1 credit spent.
 
 Production state after this test: the Worker accepts licence-test purchases (`ALLOW_GOOGLE_TEST_PURCHASES = "1"`). This must be switched off before the Android app is released publicly.
+
+## Parity audit, 1 October 2026
+
+A line-by-line comparison of every iOS and Android screen found six behaviour gaps. The pop-out showed one page only. The pop-out was not discoverable. There was no zoom inside the recipe viewer. Long recipe notes were cut off in the viewer. Opening a note went straight into editing, so its links could not be tapped. There was no light theme. A seventh gap was found while testing: long recipe notes pushed the Update Recipe button off the edit dialog. All seven were fixed in version 0.4.4 (commit 964c78f).
+
+Three differences are deliberate and stay. Android uses visible icons and inline add boxes in place of iOS swipe actions and + buttons. Export and Import backup are in released Android builds, while iOS keeps them to development builds. Android has the Google Drive recipe-file backup, because Android's own backup cannot hold recipe files.
