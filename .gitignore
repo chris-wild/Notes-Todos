@@ -18,3 +18,7 @@ captures/
 
 # Local archive of the retired server's data (never commit)
 export/
+
+# App Review screen recordings (sent to Apple, not kept in git)
+app-review/*.mp4
+app-review/*.mov

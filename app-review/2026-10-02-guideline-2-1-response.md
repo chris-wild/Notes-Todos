@@ -1,6 +1,6 @@
 # App Review response: Guideline 2.1, Information Needed
 
-Submission ID a917af80-909f-4f29-98be-a1e1315714da, HobPad 1.0.1 (build 26). Apple asked for this information in the Resolution Center reply and in the Notes field of App Review Information. The text below the line is written to be pasted into both.
+Submission ID a917af80-909f-4f29-98be-a1e1315714da, HobPad 1.0.1 (build 26, replaced by build 27 for this reply). Apple asked for this information in the Resolution Center reply and in the Notes field of App Review Information. The text below the line is written to be pasted into both.
 
 ---
 
@@ -8,7 +8,7 @@ Thank you for reviewing HobPad. The requested information follows, numbered as i
 
 **1. Screen recording**
 
-The attached recording was captured on an iPhone running the latest version of iOS. It begins at the Home Screen, launches HobPad and shows the typical flow: adding a recipe from a photograph of a printed recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and the purchase screen for a credit pack. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs stays on their own device.
+The attached recording was captured on an iPhone 11 Pro running iOS 26.7, using build 27 installed from TestFlight. It begins at the Home Screen, launches HobPad and shows the typical flow: adding a recipe from a photograph of a printed recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and the purchase screen for a credit pack. The recording stops at the purchase sheet, before the Apple ID password is entered. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs is stored only on their own device. Section 4 describes the requests that send a recipe page to our service.
 
 **2. Purpose and target audience**
 
