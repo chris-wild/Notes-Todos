@@ -22,7 +22,8 @@ Every item below was checked on 2 October 2026 against the source, App Store Con
    4. Settings says that naming new recipes automatically is free.
 9. Play Console foundations: the HobPad payments profile, enrolment in the 15% service fee, the purchase-verification service account, licence testing, and Android developer verification.
 10. The Android paywall keeps showing Google Play's response code under the message when the credit packs cannot load. Chris decided on 2 October to keep it, because it helps support.
-11. The privacy policy at hobpad.app now covers Google Play purchases and naming of recipes added without a name. It was deployed on 2 October.
+11. The hobpad.app support page answers how credits survive a new Android phone and explains that iPhone and Android keep separate balances (decision D3, accepted), and the home page says HobPad is coming soon to Google Play. Both were deployed on 2 October.
+12. The privacy policy at hobpad.app now covers Google Play purchases and naming of recipes added without a name. It was deployed on 2 October.
 
 ### Still to verify
 
@@ -33,10 +34,8 @@ Every item below was checked on 2 October 2026 against the source, App Store Con
 
 ### Decisions for Chris
 
-1. **D3, separate balances.** An iPhone and an Android phone hold separate credit balances. The support page at hobpad.app describes only iCloud Keychain. The recommendation is to accept separate balances and add an Android answer to the support FAQ.
-2. **The hobpad.app home page.** It does not mention Google Play. Decide whether it should before the Android launch.
-3. **Play listing answers** from `play-listing/play-store-listing.md`: the target audience (13 and over is recommended), the data deletion answer (No is recommended), and whether to publish a phone number.
-4. **The next iOS version.** Build 29 cannot reach the App Store until a new version is created after 1.0.1. That version should also carry three changes. The first is the corrected App Store description, which still says photography is free without limits and that recipe content is sent only for conversion. The second is the two replacement Todos screenshots in `app-store/screenshots/`. The third is the version number, which only Chris changes.
+1. **Play listing answers** from `play-listing/play-store-listing.md`: the target audience (13 and over is recommended), the data deletion answer (No is recommended), and whether to publish a phone number.
+2. **The next iOS version.** Build 29 cannot reach the App Store until a new version is created after 1.0.1. That version should also carry three changes. The first is the corrected App Store description, which still says photography is free without limits and that recipe content is sent only for conversion. The second is the two replacement Todos screenshots in `app-store/screenshots/`. The third is the version number, which only Chris changes.
 
 ### Play Console store setup
 
