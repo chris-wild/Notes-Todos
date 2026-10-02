@@ -668,7 +668,7 @@ private fun SettingsDialog(
                 }
                 Text(
                     text = "One credit converts one recipe page into a shopping list. " +
-                        "Naming photographed recipes is free.",
+                        "Naming new recipes automatically is free.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

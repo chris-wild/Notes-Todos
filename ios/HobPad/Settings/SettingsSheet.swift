@@ -22,7 +22,7 @@ struct SettingsSheet: View {
                         Text(model.ops.balance.map(String.init) ?? "—")
                             .fontWeight(.semibold)
                     }
-                    Text("One credit converts one recipe page into a shopping list. Naming photographed recipes is free.")
+                    Text("One credit converts one recipe page into a shopping list. Naming new recipes automatically is free.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Button("Buy credits") { paywallOpen = true }
