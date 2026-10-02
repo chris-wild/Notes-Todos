@@ -19,6 +19,7 @@ data class NotesUiState(
     val pinned: List<NoteEntity> = emptyList(),
     val others: List<NoteEntity> = emptyList(),
     val hasAnyNotes: Boolean = false,
+    val noteCount: Int = 0,
     val query: String = "",
     val sort: NoteSort = NoteSort.DateDesc,
     val viewMode: ViewMode = ViewMode.Grid,
@@ -48,6 +49,7 @@ class NotesViewModel(
             pinned = NoteSorting.sort(filtered.filter { it.pinned }, sort),
             others = NoteSorting.sort(filtered.filter { !it.pinned }, sort),
             hasAnyNotes = notes.isNotEmpty(),
+            noteCount = notes.size,
             query = q,
             sort = sort,
             viewMode = viewMode,
@@ -73,6 +75,10 @@ class NotesViewModel(
 
     fun delete(id: Long) {
         viewModelScope.launch { notesRepository.delete(id) }
+    }
+
+    fun deleteAll() {
+        viewModelScope.launch { notesRepository.deleteAll() }
     }
 
     fun setSort(sort: NoteSort) {

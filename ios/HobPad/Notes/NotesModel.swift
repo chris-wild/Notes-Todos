@@ -74,4 +74,8 @@ final class NotesModel {
     func delete(_ note: NoteEntity) {
         Task { try? await core.notesRepository.delete(id: note.id) }
     }
+
+    func deleteAll() {
+        Task { try? await core.notesRepository.deleteAll() }
+    }
 }

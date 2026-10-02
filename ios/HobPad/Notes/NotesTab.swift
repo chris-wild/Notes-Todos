@@ -24,6 +24,7 @@ private struct NotesContent: View {
     @State private var editingNote: NoteEntity?
     @State private var composing = false
     @State private var deleteTarget: NoteEntity?
+    @State private var confirmingDeleteAll = false
 
     private let columns = [GridItem(.adaptive(minimum: 160), spacing: 10)]
 
@@ -65,6 +66,10 @@ private struct NotesContent: View {
                         sortButton("Date ↑", .dateAsc)
                         sortButton("A → Z", .alphaAsc)
                         sortButton("Z → A", .alphaDesc)
+                        if !model.allNotes.isEmpty {
+                            Divider()
+                            Button("Delete All Notes", role: .destructive) { confirmingDeleteAll = true }
+                        }
                     } label: {
                         Image(systemName: "arrow.up.arrow.down")
                     }
@@ -109,6 +114,12 @@ private struct NotesContent: View {
                 Button("Cancel", role: .cancel) { deleteTarget = nil }
             } message: {
                 Text("\(deleteTarget?.title.isEmpty == false ? deleteTarget!.title : "This note") will be permanently deleted.")
+            }
+            .alert("Delete all \(model.allNotes.count) notes?", isPresented: $confirmingDeleteAll) {
+                Button("Delete All", role: .destructive) { model.deleteAll() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Every note, pinned or not, will be permanently deleted. Recipes and todos are not affected.")
             }
             .task { await model.observeNotes() }
             .task { await model.observeSettings() }

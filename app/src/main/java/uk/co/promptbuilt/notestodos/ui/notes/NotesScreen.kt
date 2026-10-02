@@ -29,6 +29,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +68,7 @@ fun NotesScreen() {
 
     var editingNote by remember { mutableStateOf<NoteEntity?>(null) }
     var deleteTarget by remember { mutableStateOf<NoteEntity?>(null) }
+    var confirmingDeleteAll by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         NotesToolbar(
@@ -76,6 +78,8 @@ fun NotesScreen() {
             onQueryChange = viewModel::setQuery,
             onSortChange = viewModel::setSort,
             onViewModeChange = viewModel::setViewMode,
+            canDeleteAll = state.hasAnyNotes,
+            onDeleteAll = { confirmingDeleteAll = true },
         )
 
         LazyVerticalStaggeredGrid(
@@ -159,6 +163,24 @@ fun NotesScreen() {
             },
         )
     }
+
+    if (confirmingDeleteAll) {
+        AlertDialog(
+            onDismissRequest = { confirmingDeleteAll = false },
+            title = { Text("Delete all ${state.noteCount} notes?") },
+            text = { Text("Every note, pinned or not, will be permanently deleted. Recipes and todos are not affected.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteAll()
+                    confirmingDeleteAll = false
+                    editingNote = null
+                }) { Text("Delete All", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDeleteAll = false }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 @Composable
@@ -169,6 +191,8 @@ private fun NotesToolbar(
     onQueryChange: (String) -> Unit,
     onSortChange: (NoteSort) -> Unit,
     onViewModeChange: (ViewMode) -> Unit,
+    canDeleteAll: Boolean,
+    onDeleteAll: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -196,6 +220,17 @@ private fun NotesToolbar(
                         onClick = {
                             onSortChange(option)
                             sortMenuOpen = false
+                        },
+                    )
+                }
+                // As on iOS, Delete All Notes sits at the foot of the sort menu.
+                if (canDeleteAll) {
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Delete All Notes", color = MaterialTheme.colorScheme.error) },
+                        onClick = {
+                            sortMenuOpen = false
+                            onDeleteAll()
                         },
                     )
                 }

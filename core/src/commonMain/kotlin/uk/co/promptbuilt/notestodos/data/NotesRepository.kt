@@ -39,4 +39,7 @@ class NotesRepository(private val noteDao: NoteDao) {
 
     @Throws(Exception::class)
     suspend fun delete(id: Long) = noteDao.delete(id)
+
+    @Throws(Exception::class)
+    suspend fun deleteAll() = noteDao.deleteAll()
 }
