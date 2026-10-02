@@ -49,9 +49,7 @@ private struct TodosContent: View {
                 }
                 List {
                     if model.visibleTodos.isEmpty {
-                        Text(model.query.isEmpty
-                             ? "Nothing in \(model.activeCategory) yet — add one above."
-                             : "No todos match your search.")
+                        Text("Nothing in \(model.activeCategory) yet — add one above.")
                             .foregroundStyle(.secondary)
                     }
                     ForEach(model.visibleTodos, id: \.id) { todo in
@@ -105,20 +103,18 @@ private struct TodosContent: View {
                 isPresented: $confirmDeleteAll,
             ) {
                 Button("Delete All", role: .destructive) {
-                    // Emptying a non-default category removes the category too — but only
-                    // when the WHOLE category is going (a search subset leaves survivors).
+                    // Emptying a non-default category removes the category too.
                     model.delete(
                         ids: Set(model.visibleTodos.map { $0.id }),
-                        removeCategory: !model.activeIsDefault && model.query.isEmpty,
+                        removeCategory: !model.activeIsDefault,
                     )
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text(!model.activeIsDefault && model.query.isEmpty
+                Text(!model.activeIsDefault
                      ? "Everything in \"\(model.activeCategory)\" will be deleted, and the empty category removed."
                      : "Everything in \"\(model.activeCategory)\" will be deleted.")
             }
-            .searchable(text: $model.query, prompt: "Search todos")
             .task { await model.observeTodos() }
             .task { await model.observeCategories() }
             // A freshly created ingredient list routes here with its category preselected.

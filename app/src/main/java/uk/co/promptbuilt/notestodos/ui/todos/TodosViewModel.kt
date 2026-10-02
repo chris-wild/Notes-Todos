@@ -19,7 +19,6 @@ data class TodosUiState(
     val categories: List<String> = CategoryRules.DEFAULTS,
     val activeCategory: String = CategoryDefaults.GENERAL,
     val visibleTodos: List<TodoEntity> = emptyList(),
-    val query: String = "",
 )
 
 class TodosViewModel(
@@ -38,8 +37,6 @@ class TodosViewModel(
         }
     }
 
-    private val query = MutableStateFlow("")
-
     // Survives tab switches (nav backstack save/restore recreates this ViewModel).
     private val activeCategory =
         savedState.getStateFlow(KEY_ACTIVE_CATEGORY, CategoryDefaults.GENERAL)
@@ -48,8 +45,7 @@ class TodosViewModel(
         repository.observeTodos(),
         repository.observeCategories(),
         activeCategory,
-        query,
-    ) { todos, categories, active, q ->
+    ) { todos, categories, active ->
         // Fall back to General when the active category disappears (e.g. deleted).
         val resolved = categories.firstOrNull {
             CategoryRules.normalize(it) == CategoryRules.normalize(active)
@@ -59,18 +55,12 @@ class TodosViewModel(
                 val cat = it.category.ifBlank { CategoryDefaults.GENERAL }
                 CategoryRules.normalize(cat) == CategoryRules.normalize(resolved)
             }
-            .filter { q.isBlank() || it.text.contains(q, ignoreCase = true) }
         TodosUiState(
             categories = categories,
             activeCategory = resolved,
             visibleTodos = visible,
-            query = q,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodosUiState())
-
-    fun setQuery(q: String) {
-        query.value = q
-    }
 
     fun selectCategory(name: String) {
         savedState[KEY_ACTIVE_CATEGORY] = name
@@ -90,8 +80,8 @@ class TodosViewModel(
     }
 
     /**
-     * Deletes every visible todo. Emptying a non-default category removes the category too,
-     * but only when the whole category is going: a search shows a subset and leaves survivors.
+     * Deletes every todo in the active category. Emptying a non-default category removes the
+     * category too.
      */
     fun deleteAllVisible() {
         val state = uiState.value
@@ -106,7 +96,7 @@ class TodosViewModel(
     }
 
     fun removesCategory(state: TodosUiState): Boolean =
-        !CategoryRules.isDefault(state.activeCategory) && state.query.isBlank()
+        !CategoryRules.isDefault(state.activeCategory)
 
     /** Returns false when the name is blank or already exists; selects the new category on success. */
     suspend fun addCategory(name: String): Boolean {

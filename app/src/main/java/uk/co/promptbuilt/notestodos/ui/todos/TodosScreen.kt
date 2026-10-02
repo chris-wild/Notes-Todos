@@ -85,16 +85,6 @@ fun TodosScreen() {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = viewModel::setQuery,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            placeholder = { Text("Search todos") },
-            singleLine = true,
-        )
-
         // Category tab strip (port of TodosTab.js:31-66): active non-default
         // categories carry a remove affordance; "+" opens the add row.
         // Keep the selected category in view, so a list opened from a recipe shows its chip.
@@ -185,11 +175,7 @@ fun TodosScreen() {
 
         if (state.visibleTodos.isEmpty()) {
             Text(
-                text = if (state.query.isBlank()) {
-                    "Nothing in ${state.activeCategory} yet — add one above."
-                } else {
-                    "No todos match your search."
-                },
+                text = "Nothing in ${state.activeCategory} yet — add one above.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(16.dp),

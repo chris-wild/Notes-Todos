@@ -9,7 +9,6 @@ final class TodosModel {
     private(set) var allTodos: [TodoEntity] = []
     private(set) var categories: [String] = ["General", "Shopping List"]
     var activeCategory = "General"
-    var query = ""
 
     init(core: CoreServices) {
         self.core = core
@@ -21,7 +20,6 @@ final class TodosModel {
                 let category = todo.category.isEmpty ? "General" : todo.category
                 return category.lowercased() == activeCategory.lowercased()
             }
-            .filter { query.isEmpty || $0.text.localizedCaseInsensitiveContains(query) }
     }
 
     var activeIsDefault: Bool {
