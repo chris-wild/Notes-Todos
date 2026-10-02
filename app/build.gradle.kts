@@ -17,8 +17,8 @@ android {
         applicationId = "uk.co.promptbuilt.hobpad"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.4.5"
+        versionCode = 10
+        versionName = "0.4.6"
         manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
