@@ -5,7 +5,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
-import android.graphics.pdf.PdfDocument
+import android.graphics.pdf.PdfRenderer
+import android.media.ExifInterface
+import android.os.ParcelFileDescriptor
 import android.net.Uri
 import android.provider.OpenableColumns
 import java.io.File
@@ -103,35 +105,106 @@ class RecipeFiles(
         val opts = BitmapFactory.Options().apply { inSampleSize = sample }
         val decoded = resolver.openInputStream(uri)!!.use { BitmapFactory.decodeStream(it, null, opts) }
             ?: throw IllegalArgumentException("Could not decode image")
+        // Cameras often store a photo sideways with an orientation tag; iOS applies the tag
+        // when it reads the image, so the page must be turned upright here too.
+        val orientation = runCatching {
+            resolver.openInputStream(uri)!!.use {
+                ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            }
+        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
         val longEdge = maxOf(decoded.width, decoded.height)
-        val bitmap = if (longEdge > MAX_IMAGE_EDGE_PX) {
-            val scale = MAX_IMAGE_EDGE_PX.toFloat() / longEdge
-            Bitmap.createScaledBitmap(
-                decoded,
-                (decoded.width * scale).toInt().coerceAtLeast(1),
-                (decoded.height * scale).toInt().coerceAtLeast(1),
-                true,
-            ).also { if (it !== decoded) decoded.recycle() }
-        } else {
+        val scale = if (longEdge > MAX_IMAGE_EDGE_PX) MAX_IMAGE_EDGE_PX.toFloat() / longEdge else 1f
+        val matrix = orientationMatrix(orientation).apply { postScale(scale, scale) }
+        val bitmap = if (matrix.isIdentity) {
             decoded
+        } else {
+            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                .also { if (it !== decoded) decoded.recycle() }
         }
         try {
-            val document = PdfDocument()
-            try {
-                val pageInfo = PdfDocument.PageInfo.Builder(bitmap.width, bitmap.height, 1).create()
-                val page = document.startPage(pageInfo)
-                page.canvas.drawBitmap(bitmap, Matrix(), null)
-                document.finishPage(page)
-                target.outputStream().use { document.writeTo(it) }
-            } finally {
-                document.close()
-            }
+            val page = jpegPage(bitmap, bitmap.width.toFloat(), bitmap.height.toFloat())
+            target.outputStream().use { JpegPdf.write(listOf(page), it) }
         } finally {
             bitmap.recycle()
         }
     }
 
+    /**
+     * iOS's PdfCompactor at launch: any stored PDF over 8 MB is redrawn page by page as JPEG
+     * pages, at most 2200 points on the long edge and rasterised at twice that, and replaced
+     * when the result is smaller. Recipe pages stay readable and become convertible again.
+     */
+    fun compactOversized() {
+        val oversized = dir.listFiles { f -> f.isFile && f.name.endsWith(".pdf") && f.length() > COMPACT_ABOVE_BYTES }
+            .orEmpty()
+        for (file in oversized) {
+            val compacted = runCatching { compact(file) }.getOrNull() ?: continue
+            if (compacted.size < file.length()) {
+                val temp = File(file.parentFile, file.name + ".compacting")
+                temp.writeBytes(compacted)
+                if (!temp.renameTo(file)) temp.delete()
+            }
+        }
+        if (oversized.isNotEmpty()) onChanged()
+    }
+
+    private fun compact(file: File): ByteArray? =
+        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+            PdfRenderer(pfd).use { renderer ->
+                if (renderer.pageCount == 0 || renderer.pageCount > COMPACT_MAX_PAGES) return null
+                val pages = (0 until renderer.pageCount).map { index ->
+                    renderer.openPage(index).use { page ->
+                        val fit = minOf(1f, MAX_IMAGE_EDGE_PX.toFloat() / maxOf(page.width, page.height))
+                        val pageWidth = page.width * fit
+                        val pageHeight = page.height * fit
+                        val bitmap = Bitmap.createBitmap(
+                            (pageWidth * 2).toInt().coerceAtLeast(1),
+                            (pageHeight * 2).toInt().coerceAtLeast(1),
+                            Bitmap.Config.ARGB_8888,
+                        )
+                        bitmap.eraseColor(android.graphics.Color.WHITE)
+                        val toBitmap = Matrix().apply { setScale(fit * 2, fit * 2) }
+                        page.render(bitmap, null, toBitmap, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        try {
+                            jpegPage(bitmap, pageWidth, pageHeight)
+                        } finally {
+                            bitmap.recycle()
+                        }
+                    }
+                }
+                java.io.ByteArrayOutputStream().also { JpegPdf.write(pages, it) }.toByteArray()
+            }
+        }
+
+    private fun jpegPage(bitmap: Bitmap, pageWidth: Float, pageHeight: Float): JpegPdf.Page {
+        val jpeg = java.io.ByteArrayOutputStream().also {
+            bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it)
+        }.toByteArray()
+        return JpegPdf.Page(jpeg, bitmap.width, bitmap.height, pageWidth, pageHeight)
+    }
+
+    private fun orientationMatrix(orientation: Int): Matrix = Matrix().apply {
+        when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> postRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> postRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> postRotate(270f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> postScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> postScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                postRotate(90f)
+                postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                postRotate(270f)
+                postScale(-1f, 1f)
+            }
+        }
+    }
+
     private companion object {
         const val MAX_IMAGE_EDGE_PX = 2200
+        const val JPEG_QUALITY = 60
+        const val COMPACT_ABOVE_BYTES = 8L * 1024 * 1024
+        const val COMPACT_MAX_PAGES = 20
     }
 }

@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -343,6 +344,8 @@ fun RecipesScreen(onOpenTodos: () -> Unit) {
             driveBackup = app.driveBackup,
             balance = ops.balance,
             appPrefs = app.appPrefs,
+            message = state.message,
+            onRefreshBalance = { app.opsStore.refreshBalance() },
             onBuyCredits = {
                 settingsOpen = false
                 paywallOpen = true
@@ -626,12 +629,18 @@ private fun SettingsDialog(
     driveBackup: DriveBackup,
     balance: Int?,
     appPrefs: AppPrefs,
+    message: String?,
+    onRefreshBalance: suspend () -> Unit,
     onBuyCredits: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val context = LocalContext.current
     var units by remember { mutableStateOf(appPrefs.units) }
     var keyDraft by remember { mutableStateOf("") }
     var confirmImport by remember { mutableStateOf<Uri?>(null) }
+
+    // As iOS's Settings sheet: the balance is fetched fresh whenever Settings opens.
+    LaunchedEffect(Unit) { onRefreshBalance() }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
@@ -750,6 +759,17 @@ private fun SettingsDialog(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 DriveBackupSection(driveBackup)
+
+                // Results of actions taken here ("Backup exported" and so on) show here too,
+                // as in iOS's Settings sheet, not only on the list behind it.
+                message?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
             }
         },
         confirmButton = {
@@ -761,7 +781,11 @@ private fun SettingsDialog(
         AlertDialog(
             onDismissRequest = { confirmImport = null },
             title = { Text("Replace all data?") },
-            text = { Text("Importing replaces every note, todo, category and recipe on this device with the backup's contents.") },
+            text = {
+                val size = remember(uri) { backupSize(context, uri) }
+                val backup = size?.let { "this $it backup" } ?: "this backup"
+                Text("Importing $backup replaces every note, todo, category and recipe on this device.")
+            },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.importBackup(uri)
@@ -774,3 +798,11 @@ private fun SettingsDialog(
         )
     }
 }
+
+/** The picked backup's size for the import confirmation, as iOS shows it ("12.3 MB"). */
+private fun backupSize(context: android.content.Context, uri: Uri): String? =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use {
+            if (it.moveToFirst() && !it.isNull(0)) android.text.format.Formatter.formatShortFileSize(context, it.getLong(0)) else null
+        }
+    }.getOrNull()

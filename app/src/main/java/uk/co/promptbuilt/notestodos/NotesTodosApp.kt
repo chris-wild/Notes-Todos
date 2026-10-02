@@ -72,5 +72,7 @@ class NotesTodosApp : Application() {
         super.onCreate()
         driveBackup.onAppStart()
         opsStore.start()
+        // As iOS's PdfCompactor at launch: shrink any recipe PDF too large to convert.
+        Thread({ runCatching { recipeFiles.compactOversized() } }, "pdf-compactor").start()
     }
 }
