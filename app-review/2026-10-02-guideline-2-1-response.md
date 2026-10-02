@@ -8,7 +8,7 @@ Thank you for reviewing HobPad. The requested information follows, numbered as i
 
 **1. Screen recording**
 
-The attached recording was captured on an iPhone running the latest version of iOS. It begins at the Home Screen, launches HobPad and shows the typical flow: adding a recipe from a photograph of a printed recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and buying a credit pack. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs stays on their own device.
+The attached recording was captured on an iPhone running the latest version of iOS. It begins at the Home Screen, launches HobPad and shows the typical flow: adding a recipe from a photograph of a printed recipe, opening it, creating an ingredient shopping list from it, using the Todos and Notes tabs, the Settings screen, and the purchase screen for a credit pack. HobPad has no account registration, no sign-in and no account deletion, because it has no accounts. It has no user-generated content that is shared with other people, so it needs no reporting or blocking mechanism. Everything a person writes or photographs stays on their own device.
 
 **2. Purpose and target audience**
 
@@ -62,7 +62,7 @@ The purchase screen can be reached in three ways:
 
 ## Notes for Chris (not for Apple)
 
-**Recording.** Recorded on the spare iPhone 11 Pro from the Mac over the cable, with no personal data on the phone. Its camera does not work, so the recipe is added with + then Attach image, from a photograph already in Photos, with the name left blank so that HobPad names it. Naming a blank-named recipe arrives in build 27, so build 27 must be uploaded and chosen for version 1.0.1 before recording. Section 3 still tells the reviewer how to use the camera. The steps and shot list are in `scripts/review-recording/README.md`. About two to three minutes is enough.
+**Recording.** Recorded on the spare iPhone 11 Pro from the Mac over the cable. That phone held a copy of Chris's own notes, which must be removed before recording. Its camera does not work, so the recipe is added with + then Attach image, from a photograph already in Photos, with the name left blank so that HobPad names it. Naming a blank-named recipe arrives in build 27, so build 27 must be uploaded and chosen for version 1.0.1 before recording. Section 3 still tells the reviewer how to use the camera. The steps and shot list are in `scripts/review-recording/README.md`. About two to three minutes is enough.
 
 Shot list, for reference:
 
@@ -72,8 +72,8 @@ Shot list, for reference:
 4. Go back to the recipe and tap Create ingredient list again, to show that a re-run is free.
 5. Notes tab. Create a short note and open it.
 6. Recipes tab, gear button. Show the credits and the units setting.
-7. Tap Buy credits and buy the 50 pack. A TestFlight install of build 27 makes this a sandbox purchase with no charge. Show the balance rising by 50.
+7. Tap Buy credits and tap the 50 pack, then stop at the purchase sheet. The Apple ID password is not entered on camera, so the recording ends there.
 
-**Privacy.** The recording goes to Apple. The iPhone 11 Pro holds none of your notes, which is why it is used rather than your own phone.
+**Privacy.** The recording goes to Apple. Before recording, the iPhone 11 Pro must hold none of your notes and no personal photos. A take on 2 October showed your notes, so it was not used.
 
 **Where it goes.** Apple wants the answers in two places: a reply in the App Review section of App Store Connect, with the recording attached, and the Notes field of App Review Information. The App Store Connect API cannot send the Resolution Center reply, so that needs the web page. The Notes field can be set through the API.
