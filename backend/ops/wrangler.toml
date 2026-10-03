@@ -42,8 +42,9 @@ crons = ["0 */6 * * *"]
 
 [vars]
 BUNDLE_ID = "uk.co.promptbuilt.hobpad"
-# Sandbox stays allowed until App Store launch: App Review buys in sandbox, and Chris's
-# sideloaded Release builds produce Sandbox-environment purchases. Tighten at launch.
+# Sandbox stays allowed permanently: App Review buys in sandbox for every version, and
+# Apple expects a production server to accept test-environment purchases. TestFlight
+# testers can therefore get credits without paying, which is accepted.
 ALLOWED_ENVIRONMENTS = "Production,Sandbox"
 PLAY_PACKAGE_NAME = "uk.co.promptbuilt.hobpad"
 # License-tester (test) Play purchases stay allowed until Android launch: closed testing buys

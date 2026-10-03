@@ -51,20 +51,21 @@ Still open on this work:
 
 ### Play Console store setup
 
-The draft in `play-listing/play-store-listing.md` covers the store listing, the ten app content declarations and the data safety answers, and the graphics and four phone screenshots are ready in `play-listing/`. None of it has been entered in Play Console yet. The privacy policy prerequisite is now met.
+Done on 3 October 2026. The store listing, every app content declaration, the content rating and the data safety form are saved in Play Console, as recorded in `play-listing/play-store-listing.md`. App content shows nothing needing attention, and nothing has been sent for review.
 
 ### Closed test and production access
 
-On hold until Chris recruits HobPad testers. Google requires at least 12 testers opted in for 14 continuous days on the closed testing track before production access can be requested. This sets the earliest possible launch date.
+On hold. On 3 October 2026 Chris decided to leave Google Play as it is and concentrate on the iOS launch. Google requires at least 12 testers opted in (each accepting the opt-in link, not merely listed) for 14 continuous days on the closed testing track before production access can be requested, and it may refuse production access if tester engagement was insufficient. The alternative considered was an organisation account for Chris's limited company, which is exempt but needs a D-U-N-S number, business verification, a new payments profile and an app transfer. Google does not document whether a transferred app keeps the testing requirement.
 
 ### Production configuration at launch
 
 1. Turn off `ALLOW_GOOGLE_TEST_PURCHASES` on the production Worker before the public Android release. It is on now, which is how the licence-test purchase was credited.
-2. After iOS 1.0.1 is released, tighten `ALLOWED_ENVIRONMENTS` on the production Worker from "Production,Sandbox" to "Production".
+2. Keep `ALLOWED_ENVIRONMENTS` at "Production,Sandbox" on the production Worker after the App Store launch. This replaces the earlier plan to drop Sandbox. App Review buys in the sandbox for every future version, and Apple expects a production server to accept test-environment purchases. The cost is that invited TestFlight testers can obtain credits on the live service without paying.
 
 ### Shared with iOS
 
-1. The App Review outcome for iOS 1.0.1 with build 27. Build 27 already carries commit dd7122c, the shared title parser. Release is manual and Chris decides when.
+1. The App Review outcome for iOS 1.0.1 with build 27, waiting for review since 2 October 2026. Build 27 already carries commit dd7122c, the shared title parser. Release is manual and Chris decides when. On 3 October 2026 Chris chose to leave the submission in the queue and wait for Apple's reply, rather than withdraw it to swap in build 30 and correct the description. The submitted description says recipe content is sent only when a conversion is requested, which build 27 does not match, because it also sends a photo or a PDF's first page for automatic naming. The next version corrects it.
+2. The App Store privacy label declares User ID, Photos or Videos and Purchase History. Recipe PDFs are also sent, so "Other User Content" (app functionality, not linked to identity) should probably be added. Awaiting Chris's decision; the label can be changed at any time and publishes immediately.
 
 ### Housekeeping
 
