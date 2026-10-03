@@ -5,7 +5,9 @@
 // consistent store would let them.
 //
 // Storage layout (key-value API over the SQLite backend, RiderNav convention):
-//   "meta"      -> { createdAt, freeGranted }         written once
+//   "meta"      -> { createdAt, freeGranted, starter? } starter is "pending" until the device is
+//                  checked (src/starter.js), then "granted" or "denied"; absent on accounts made
+//                  by clients from before device checks, whose free ops were granted at creation
 //   "balance"   -> integer ops remaining              may go NEGATIVE after a refund
 //   "txn:<id>"  -> { ops, productId, environment | platform+orderId+purchaseType, refunded, at }
 //                  the money trail, kept forever; <id> is Apple's transaction id or "google:…"
@@ -23,23 +25,66 @@ export class OpsAccount extends DurableObject {
   }
 
   /**
-   * Make sure the account exists, granting the free starter ops on first sight. Creation is
-   * rationed per client address so scripted fresh UUIDs cannot farm free extractions.
-   * Returns { balance } or { limited: true }.
+   * Make sure the account exists. Creation is rationed per client address so scripted fresh
+   * UUIDs cannot farm free extractions. [deviceChecked] says whether the free starter ops wait
+   * for a device check (src/starter.js) or, for clients from before device checks, are granted
+   * at once. Returns { balance, starter } or { limited: true }.
    */
-  async ensure(address) {
+  async ensure(address, deviceChecked) {
     const meta = await this.meta();
-    if (meta) return { balance: await this.ctx.storage.get("balance") };
+    if (meta) return { balance: await this.ctx.storage.get("balance"), starter: meta.starter ?? "granted" };
     const allowed = await this.env.LIMITER.get(this.env.LIMITER.idFromName(address || "unknown"))
       .check("newAccount", true);
     if (!allowed) return { limited: true };
-    return { balance: await this.create(Number(this.env.FREE_OPS || 0)) };
+    return this.create(deviceChecked);
   }
 
-  async create(startingBalance) {
-    await this.ctx.storage.put("meta", { createdAt: Date.now(), freeGranted: startingBalance });
-    await this.ctx.storage.put("balance", startingBalance);
-    return startingBalance;
+  async create(deviceChecked) {
+    const free = Number(this.env.FREE_OPS || 0);
+    const meta = deviceChecked
+      ? { createdAt: Date.now(), freeGranted: 0, starter: "pending" }
+      : { createdAt: Date.now(), freeGranted: free };
+    await this.ctx.storage.put("meta", meta);
+    await this.ctx.storage.put("balance", meta.freeGranted);
+    return { balance: meta.freeGranted, starter: meta.starter ?? "granted" };
+  }
+
+  /** "pending", "granted" or "denied"; accounts from before device checks count as granted. */
+  async starter() {
+    const meta = await this.meta();
+    return { starter: meta ? meta.starter ?? "granted" : "pending", balance: (await this.ctx.storage.get("balance")) ?? 0 };
+  }
+
+  /**
+   * Settle a pending starter grant once: [granted] adds the free ops, otherwise the account is
+   * marked denied. A second call changes nothing, so two racing device checks grant at most once.
+   */
+  async resolveStarter(granted) {
+    const meta = await this.meta();
+    if (!meta || (meta.starter ?? "granted") !== "pending") return this.starter();
+    const free = Number(this.env.FREE_OPS || 0);
+    let balance = await this.ctx.storage.get("balance");
+    if (granted) {
+      balance += free;
+      await this.ctx.storage.put("balance", balance);
+    }
+    await this.ctx.storage.put("meta", { ...meta, starter: granted ? "granted" : "denied", freeGranted: granted ? free : 0 });
+    return { starter: granted ? "granted" : "denied", balance };
+  }
+
+  /**
+   * Erase everything this account holds, for a deletion request. Returns the Google transaction
+   * ids it had, so the caller can remove them from the order index too.
+   */
+  async erase() {
+    if ((await this.meta()) === null && (await this.ctx.storage.list({ limit: 1 })).size === 0) {
+      return { existed: false, googleTxnIds: [] };
+    }
+    const txns = await this.ctx.storage.list({ prefix: "txn:google:" });
+    const googleTxnIds = [...txns.keys()].map((key) => key.slice("txn:".length));
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    return { existed: true, googleTxnIds };
   }
 
   /** Hold [pages] ops for one extraction call. { ok, balance } or { ok: false, needed, balance }. */
@@ -71,10 +116,10 @@ export class OpsAccount extends DurableObject {
    * never double-credit.
    * A purchase also creates the account (no address rationing: money changed hands).
    */
-  async credit(txnId, ops, detail) {
+  async credit(txnId, ops, detail, deviceChecked = false) {
     const existing = await this.ctx.storage.get(`txn:${txnId}`);
     if (existing) return { balance: await this.ctx.storage.get("balance"), credited: 0, duplicate: true };
-    if ((await this.meta()) === null) await this.create(Number(this.env.FREE_OPS || 0));
+    if ((await this.meta()) === null) await this.create(deviceChecked);
     const balance = (await this.ctx.storage.get("balance")) + ops;
     await this.ctx.storage.put("balance", balance);
     await this.ctx.storage.put(`txn:${txnId}`, { ops, ...detail, refunded: false, at: Date.now() });

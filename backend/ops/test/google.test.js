@@ -149,7 +149,7 @@ describe("POST /v1/purchase/google", () => {
     const reply = await buy(token, playPurchase({ obfuscatedExternalAccountId: token }));
     expect(reply).toEqual({ status: 200, body: { balance: 55, credited: 50, duplicate: false } }); // 5 free + 50
     // The naming-cap exemption keys off purchased: a Google-funded account must report it.
-    expect(await balanceOf(token)).toEqual({ balance: 55, purchased: true });
+    expect(await balanceOf(token)).toEqual({ balance: 55, purchased: true, starter: "granted" });
   });
 
   it("signs a valid RS256 service-account assertion and reuses the access token", async () => {
@@ -164,7 +164,7 @@ describe("POST /v1/purchase/google", () => {
     expect(header).toEqual({ alg: "RS256", typ: "JWT" });
     expect(claims).toMatchObject({
       iss: CLIENT_EMAIL,
-      scope: "https://www.googleapis.com/auth/androidpublisher",
+      scope: "https://www.googleapis.com/auth/androidpublisher https://www.googleapis.com/auth/playintegrity",
       aud: TOKEN_URL,
     });
     expect(claims.exp - claims.iat).toBe(3600);
@@ -223,7 +223,7 @@ describe("POST /v1/purchase/google", () => {
     );
     expect(rejected.status).toBe(403);
     expect(rejected.body.error.type).toBe("test_purchase_rejected");
-    expect(await balanceOf(other)).toEqual({ balance: 5, purchased: false });
+    expect(await balanceOf(other)).toEqual({ balance: 5, purchased: false, starter: "granted" });
     // The pure rule, for completeness: real (absent) and promo purchases are unaffected.
     expect(purchaseVerdict({ purchaseState: 0, obfuscatedExternalAccountId: other }, other, strict)).toBeNull();
     expect(purchaseVerdict({ purchaseState: 0, obfuscatedExternalAccountId: other, purchaseType: 1 }, other, strict)).toBeNull();
@@ -311,7 +311,7 @@ describe("Google refunds (Voided Purchases cron)", () => {
     expect(voidedRequests[0].get("maxResults")).toBe("1000");
     expect(Number(voidedRequests[0].get("startTime"))).toBeGreaterThan(Date.now() - 30 * 24 * 3600 * 1000);
     expect(voidedRequests[1].get("token")).toBe("page-2");
-    expect(await balanceOf(token)).toEqual({ balance: -35, purchased: true });
+    expect(await balanceOf(token)).toEqual({ balance: -35, purchased: true, starter: "granted" });
 
     const checkpoint = await ordersStub().checkpoint();
     expect(checkpoint).toBeGreaterThan(Date.now() - 60_000);

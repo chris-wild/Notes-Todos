@@ -4,7 +4,9 @@
 // (src/purchase.js). Deployed by scripts/ops-deploy.sh, never by an app build.
 //
 // Routes (bearer = the app's anonymous account UUID unless noted):
-//   GET  /v1/balance                       -> { balance }
+//   GET  /v1/balance                       -> { balance, purchased, starter }
+//   POST /v1/starter  {platform, …}        -> { starter, balance } (src/starter.js: free credits
+//                                             once per device)
 //   POST /v1/extract?name=…    base64 PDF  -> Anthropic Messages JSON, charges PAGES ops
 //   POST /v1/extract-text?name=…  raw text -> Anthropic Messages JSON, charges 1 op
 //   POST /v1/title             base64 PDF  -> Anthropic Messages JSON, FREE (daily-capped)
@@ -12,7 +14,14 @@
 //   POST /v1/asn  {signedPayload}          -> App Store Server Notifications V2 (refunds)
 //   POST /v1/purchase/google  {packageName, productId, purchaseToken}
 //                                          -> { balance, credited, duplicate } (Play-verified)
+//   POST /v1/admin/erase  admin bearer     -> deletion requests (src/admin.js)
 //   cron "0 */6 * * *"                     -> Google Play voided purchases (refunds)
+//
+// Clients that check the device for the free starter credits send X-HobPad-Starter: 1 on
+// every call. Accounts they create start at zero with the starter grant pending. While
+// LEGACY_FREE_OPS is "1", calls without the header (builds from before device checks, such as
+// iOS build 27) still get the free credits at account creation; turn it off once no such
+// build is in use.
 //
 // PERFORMANCE CONTRACT (Workers Free = 10 ms CPU per request): the multi-megabyte PDF
 // payload is only ever base64-decoded/encoded and regex-scanned with native primitives.
@@ -22,6 +31,8 @@
 import { accountStub, isUuid } from "./account-stub.js";
 import { applyNotification, creditPurchase, creditVerified } from "./purchase.js";
 import { checkVoidedPurchases, creditGooglePurchase } from "./google.js";
+import { claimStarter } from "./starter.js";
+import { eraseAccount, isAdmin } from "./admin.js";
 
 export { Limiter, OpsAccount } from "./account.js";
 export { GoogleOrders } from "./google-orders.js";
@@ -130,6 +141,20 @@ const fail = (status, error) => json(status, { error });
 const passthrough = (status, text) =>
   new Response(text, { status, headers: { "content-type": "application/json" } });
 
+/** Whether accounts made by this request wait for a device check before the free credits. */
+const deviceChecked = (request, env) => request.headers.get("x-hobpad-starter") === "1" || env.LEGACY_FREE_OPS !== "1";
+
+/** A small JSON body, or null when the body is missing, too large or not JSON. */
+async function smallJson(request, limit = 8192) {
+  const raw = await request.text();
+  if (raw.length > limit) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function bearerToken(request) {
   const header = request.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : null;
@@ -211,6 +236,14 @@ export default {
 const MAX_GOOGLE_PURCHASE_BODY = 8192;
 
 async function route(request, env, url, parts) {
+  if (parts.length === 3 && parts[0] === "v1" && parts[1] === "admin" && parts[2] === "erase") {
+    if (request.method !== "POST") return fail(404, "not_found");
+    if (!(await isAdmin(request, env))) return fail(401, "unauthorised");
+    const body = await smallJson(request);
+    if (!body) return fail(422, "bad_request");
+    const r = await eraseAccount(env, body);
+    return json(r.status, r.body);
+  }
   // Google purchases need the bearer: unlike Apple's JWS, nothing in the request names the
   // account, and the verified purchase must carry the same token (obfuscatedExternalAccountId).
   if (parts.length === 3 && parts[0] === "v1" && parts[1] === "purchase" && parts[2] === "google") {
@@ -225,7 +258,7 @@ async function route(request, env, url, parts) {
     } catch {
       return fail(422, { type: "bad_request", message: "The body must be a small JSON object." });
     }
-    const r = await creditGooglePurchase(env, token, body);
+    const r = await creditGooglePurchase(env, token, body, deviceChecked(request, env));
     return json(r.status, r.body);
   }
   if (parts[0] !== "v1" || parts.length !== 2) return fail(404, "not_found");
@@ -246,10 +279,10 @@ async function route(request, env, url, parts) {
     if (body.test) {
       if (env.TEST_MODE !== "1") return fail(403, "test_mode_disabled");
       const { productId, transactionId, appAccountToken } = body.test;
-      const r = await creditVerified(env, { productId, transactionId, appAccountToken, quantity: 1 }, "Xcode");
+      const r = await creditVerified(env, { productId, transactionId, appAccountToken, quantity: 1 }, "Xcode", deviceChecked(request, env));
       return json(r.status, r.body);
     }
-    const r = await creditPurchase(env, body.jws);
+    const r = await creditPurchase(env, body.jws, deviceChecked(request, env));
     return json(r.status, r.body);
   }
   if (endpoint === "asn" && method === "POST") {
@@ -267,12 +300,19 @@ async function route(request, env, url, parts) {
   if (!token) return fail(401, "unauthorised");
   const address = request.headers.get("cf-connecting-ip") || "unknown";
   const account = accountStub(env, token);
-  const ensured = await account.ensure(address);
+  const ensured = await account.ensure(address, deviceChecked(request, env));
   if (ensured.limited) return fail(429, "slow_down");
 
   if (endpoint === "balance" && method === "GET") {
     // purchased lets the client mirror the naming-cap exemption rule locally.
-    return json(200, { balance: ensured.balance, purchased: await account.hasPurchased() });
+    return json(200, { balance: ensured.balance, purchased: await account.hasPurchased(), starter: ensured.starter });
+  }
+
+  if (endpoint === "starter" && method === "POST") {
+    const body = await smallJson(request, 32768);
+    if (!body) return fail(422, "bad_request");
+    const r = await claimStarter(env, token, account, body);
+    return json(r.status, r.body);
   }
 
   if (endpoint === "extract" && method === "POST") {

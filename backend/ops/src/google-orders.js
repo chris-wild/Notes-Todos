@@ -29,6 +29,13 @@ export class GoogleOrders extends DurableObject {
     return found;
   }
 
+  /** Drop [txnIds] from the index, for a deletion request (src/admin.js). */
+  async forget(txnIds) {
+    for (let i = 0; i < txnIds.length; i += GET_BATCH) {
+      await this.ctx.storage.delete(txnIds.slice(i, i + GET_BATCH).map((id) => `order:${id}`));
+    }
+  }
+
   async checkpoint() {
     return (await this.ctx.storage.get("checkpoint")) ?? null;
   }

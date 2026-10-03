@@ -62,9 +62,9 @@ describe("balance and free grant", () => {
     const token = crypto.randomUUID();
     const first = await call("/v1/balance", { token, method: "GET" });
     expect(first.status).toBe(200);
-    expect(await first.json()).toEqual({ balance: 5, purchased: false });
+    expect(await first.json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
     const again = await call("/v1/balance", { token, method: "GET" });
-    expect(await again.json()).toEqual({ balance: 5, purchased: false });
+    expect(await again.json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
   });
 
   it("refuses a missing or malformed bearer", async () => {
@@ -81,7 +81,7 @@ describe("extraction metering", () => {
     expect(reply.status).toBe(200);
     expect(await reply.text()).toBe(anthropicOk);
     const balance = await call("/v1/balance", { token, method: "GET" });
-    expect(await balance.json()).toEqual({ balance: 3, purchased: false }); // 5 - 2 pages
+    expect(await balance.json()).toEqual({ balance: 3, purchased: false, starter: "granted" }); // 5 - 2 pages
   });
 
   it("answers 402 with needed/balance when the pack is short, spending nothing", async () => {
@@ -92,7 +92,7 @@ describe("extraction metering", () => {
     expect(body.needed).toBe(9);
     expect(body.balance).toBe(5);
     expect(body.error.message).toContain("need 9, have 5");
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
   });
 
   it("refunds the reservation when the upstream call fails", async () => {
@@ -100,7 +100,7 @@ describe("extraction metering", () => {
     mockAnthropic(529, '{"error":{"type":"overloaded_error","message":"Overloaded"}}');
     const reply = await call("/v1/extract", { token, body: b64(pdfWithPages(3)) });
     expect(reply.status).toBe(529);
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
   });
 
   it("masks an upstream auth failure as 502 (never 'your key is invalid') and refunds", async () => {
@@ -109,7 +109,7 @@ describe("extraction metering", () => {
     const reply = await call("/v1/extract", { token, body: b64(pdfWithPages(1)) });
     expect(reply.status).toBe(502);
     expect(await reply.text()).not.toContain("x-api-key");
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
   });
 
   it("rejects a body that is not a PDF", async () => {
@@ -122,7 +122,7 @@ describe("extraction metering", () => {
     mockAnthropic(200, anthropicOk);
     const reply = await call("/v1/extract-text?name=Soup", { token, body: "carrots, 2 onions" });
     expect(reply.status).toBe(200);
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 4, purchased: false });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 4, purchased: false, starter: "granted" });
   });
 });
 
@@ -135,7 +135,7 @@ describe("free title calls", () => {
     }
     // TITLE_DAILY_LIMIT is 2 under test (vitest.config.js): the third call is refused unpaid.
     expect((await call("/v1/title", { token, body: b64(pdfWithPages(1)) })).status).toBe(429);
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 5, purchased: false, starter: "granted" });
   });
 });
 
@@ -153,7 +153,7 @@ describe("free title calls", () => {
       expect((await call("/v1/title", { token, body: b64(pdfWithPages(1)) })).status).toBe(200);
     }
     expect((await call("/v1/title", { token, body: b64(pdfWithPages(1)) })).status).toBe(429);
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 55, purchased: true });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 55, purchased: true, starter: "granted" });
   });
 
   it("keeps the free cap for a purchased account whose credits are spent", async () => {
@@ -165,7 +165,7 @@ describe("free title calls", () => {
     // Drain all 55 credits (5 free + 50) with one 55-page extraction.
     mockAnthropic(200, anthropicOk);
     expect((await call("/v1/extract", { token, body: b64(pdfWithPages(55)) })).status).toBe(200);
-    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 0, purchased: true });
+    expect(await (await call("/v1/balance", { token, method: "GET" })).json()).toEqual({ balance: 0, purchased: true, starter: "granted" });
     // Balance 0: back to the free cap of 2.
     mockAnthropic(200, '{"content":[{"type":"text","text":"\\"title\\": \\"Flapjacks\\"}"}]}', 2);
     for (let i = 0; i < 2; i++) {

@@ -11,7 +11,9 @@
 import { accountStub } from "./account-stub.js";
 import { productCredits } from "./purchase.js";
 
-const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
+// One token covers both APIs: purchases and refunds (androidpublisher) and the device checks
+// behind the free starter credits (playintegrity, src/starter.js).
+const SCOPE = "https://www.googleapis.com/auth/androidpublisher https://www.googleapis.com/auth/playintegrity";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
 const MAX_PURCHASE_TOKEN = 4096;
@@ -22,7 +24,7 @@ const VOIDED_WINDOW_MS = 30 * DAY_MS - 10 * 60 * 1000;
 // a day before its checkpoint. Re-reading is free: refundPurchase() debits a transaction once.
 const VOIDED_OVERLAP_MS = DAY_MS;
 
-class GoogleError extends Error {
+export class GoogleError extends Error {
   constructor(status, type, message) {
     super(message);
     this.status = status;
@@ -63,7 +65,7 @@ async function signingKey(pem) {
 
 const b64url = (data) => Buffer.from(typeof data === "string" ? data : new Uint8Array(data)).toString("base64url");
 
-async function accessToken(env) {
+export async function accessToken(env) {
   const account = serviceAccount(env);
   if (!account) throw new GoogleError(503, "not_configured", "Google Play verification is not configured.");
   const now = Date.now();
@@ -174,7 +176,7 @@ export function purchaseVerdict(purchase, token, env) {
  * purchase must carry it as obfuscatedExternalAccountId, which the app set at purchase time.
  * Returns { status, body } for the route to send.
  */
-export async function creditGooglePurchase(env, token, request) {
+export async function creditGooglePurchase(env, token, request, deviceChecked = false) {
   const { packageName, productId, purchaseToken } = request && typeof request === "object" ? request : {};
   if (!env.PLAY_PACKAGE_NAME) return failure(503, "not_configured", "Google Play verification is not configured.");
   if (packageName !== env.PLAY_PACKAGE_NAME) return failure(422, "bad_request", "Unknown packageName.");
@@ -218,7 +220,7 @@ export async function creditGooglePurchase(env, token, request) {
     productId,
     orderId: purchase.orderId ?? null,
     purchaseType: purchase.purchaseType ?? null,
-  });
+  }, deviceChecked);
   return { status: 200, body: result };
 }
 

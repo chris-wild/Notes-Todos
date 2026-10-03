@@ -59,7 +59,7 @@ export function productCredits(env) {
  * the product, the transaction id — is read from inside the VERIFIED payload, never from
  * client-supplied fields. Returns { status, body } for the route to send.
  */
-export async function creditPurchase(env, jws) {
+export async function creditPurchase(env, jws, deviceChecked = false) {
   if (typeof jws !== "string" || jws.split(".").length !== 3) return { status: 422, body: { error: "bad_jws" } };
   const environment = peekEnvironment(jws, "transaction");
   const verifier = await verifierFor(env, environment);
@@ -72,11 +72,11 @@ export async function creditPurchase(env, jws) {
     if (e instanceof VerificationException) return { status: 403, body: { error: "verification_failed" } };
     throw e;
   }
-  return creditVerified(env, payload, environment);
+  return creditVerified(env, payload, environment, deviceChecked);
 }
 
 /** Shared by the real path and the staging-only TEST_MODE path (index.js gates the latter). */
-export async function creditVerified(env, payload, environment) {
+export async function creditVerified(env, payload, environment, deviceChecked = false) {
   const credits = productCredits(env)[payload.productId];
   if (!credits) return { status: 422, body: { error: "unknown_product" } };
   if (payload.type && payload.type !== "Consumable") return { status: 422, body: { error: "not_consumable" } };
@@ -86,7 +86,7 @@ export async function creditVerified(env, payload, environment) {
   const result = await accountStub(env, payload.appAccountToken).credit(String(payload.transactionId), ops, {
     productId: payload.productId,
     environment,
-  });
+  }, deviceChecked);
   return { status: 200, body: result };
 }
 
