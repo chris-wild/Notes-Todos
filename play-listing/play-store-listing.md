@@ -1,6 +1,6 @@
 # Google Play listing and declarations (draft for Chris)
 
-Status: draft, 2 October 2026. Nothing below has been entered into Play Console. Every factual answer was checked against the code, the merged release manifest of version 0.4.4, the production Worker and the privacy policy. Items that need Chris's decision are marked **Decision**.
+Status: entered into Play Console on 3 October 2026 (see the notes at the end). Before that it was a draft. Every factual answer was checked against the code, the merged release manifest of version 0.4.4, the production Worker and the privacy policy. Items that need Chris's decision are marked **Decision**.
 
 ## Store listing
 
@@ -26,7 +26,7 @@ NOTES AND TODOS
 Simple notes with tappable links, and todo lists in categories you define.
 
 PRICING
-Notes, todos and recipe storage are free without limits. Automatic naming is free, up to 30 recipes a day, with no daily limit while you hold purchased credits. Converting a recipe page into a shopping list uses one credit, and converting the same recipe again is free. New installs include five free credits, and further credits are sold in packs. Credits never expire.
+Notes, todos and recipe storage are free without limits. Automatic naming is free, up to 30 recipes a day, with no daily limit while you hold purchased credits. Converting a recipe page into a shopping list uses one credit, and converting the same recipe again is free. Each device gets five free credits the first time HobPad is installed, and further credits are sold in packs. Credits never expire.
 
 PRIVACY
 Your data lives on your device and in your own Google backup. Recipe content leaves your device only when a recipe is named automatically or converted, and our service does not keep it. Recipe file backup to your own Google Drive is optional. No accounts, no adverts, no tracking.
@@ -80,3 +80,13 @@ Not collected: name, email, contacts, location, messages, audio, health, web bro
 ## A correction for the App Store description
 
 The approved App Store description says that photography is free without limits and that recipe content is sent only when a conversion is requested. Both were true before automatic naming gained its 30-a-day limit and before naming sent the photographed page to the service. The Play description above states the current behaviour, and the App Store description should be brought into line before 1.0.1 is resubmitted. **Decision:** whether to update the App Store description now, while the version is open for editing because of the information request.
+
+## Entered in Play Console, 3 October 2026
+
+Saved: privacy policy URL; ads (no ads); advertising ID (no, rechecked against the 0.4.7 release manifest); government apps (no); financial features (none); health apps (none); store settings (category Food & drink, tags Recipe and Notebook, email chris.wild@gmail.com, website https://hobpad.app, no phone number); the default store listing in en-GB (name, short and full description, icon, feature graphic, and the four phone screenshots in story order), saved as a draft.
+
+Open, for Chris:
+
+1. **Sign-in details (app access).** Play counts a feature behind one-time products as restricted, and its form says reviewers cannot use free trials, so "no special access" would be wrong. Proposal: give reviewers a Play promo code for the 50-credit pack, redeemed in HobPad's own purchase sheet (Buy credits, then Redeem code), because a code redeemed from the Play Store app carries no HobPad account and would not credit. Play blocks target audience and content ratings until this is answered.
+2. **AI-generated assets.** The store listing review asks whether assets were created or edited with AI. The icon's source file in the repository has a Midjourney-style name, so the icon and the feature graphic that contains it probably need labelling.
+3. **Content ratings, target audience (13 and over) and data safety** are ready to enter as drafted above, once item 1 is settled; the content rating and data safety forms are submitted only with Chris's confirmation.
