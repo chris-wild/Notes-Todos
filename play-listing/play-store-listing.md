@@ -50,7 +50,7 @@ Your data lives on your device and in your own Google backup. Recipe content lea
 1. **Privacy policy.** https://hobpad.app/privacy.html.
 2. **Ads.** No, the app contains no ads.
 3. **Sign-in details (app access).** All functionality is available without special access. There is no sign-in.
-4. **Content ratings.** IARC questionnaire, category Productivity or Reference. Every content question is answered No: no violence, sexual content, profanity, drugs, gambling or user-generated content shared with others. Users cannot interact with each other or share their location. The app sells digital goods (credit packs). Expected result: suitable for all ages (PEGI 3, Everyone).
+4. **Content ratings.** IARC questionnaire, category "All other app types". Online content is answered Yes, because the question names AI-generated content and HobPad's ingredient lists and recipe names are generated (Chris chose this over a No, 3 October 2026). The app sells digital goods (credit packs), with no chance-based purchases or cash rewards. Every other question is answered No: no violence, sexual content, offensive language or drugs, no promotion of age-restricted products, no interaction between users and no location sharing, and the app is not a browser, search engine, news or educational product. Result: Google Play and IARC Generic 3+, PEGI 3, ESRB Everyone, USK all ages, and ClassInd (Brazil) 14+, which follows from the online content answer. Every rating carries the In-app purchases element.
 5. **Target audience and content.** Ages 13 and over (13 to 15, 16 to 17, 18 and over), as Chris decided on 3 October 2026. Including under-13 groups would bring the app under Google's Families policy, which adds requirements for no benefit to a cooking app. The App Store rating is 4+, which is a content rating, not a target audience, so the two do not conflict.
 6. **Data safety.** See the next section.
 7. **Advertising ID.** No. The release manifest does not declare the advertising ID permission, and no advertising or analytics library is included.
@@ -85,8 +85,13 @@ The approved App Store description says that photography is free without limits 
 
 Saved: privacy policy URL; ads (no ads); advertising ID (no, rechecked against the 0.4.7 release manifest); government apps (no); financial features (none); health apps (none); store settings (category Food & drink, tags Recipe and Notebook, email chris.wild@gmail.com, website https://hobpad.app, no phone number); the default store listing in en-GB (name, short and full description, icon, feature graphic, and the four phone screenshots in story order), saved as a draft.
 
-Open, for Chris:
+Also saved on 3 October 2026, with Chris's confirmation:
 
-1. **Sign-in details (app access).** Play counts a feature behind one-time products as restricted, and its form says reviewers cannot use free trials, so "no special access" would be wrong. Proposal: give reviewers a Play promo code for the 50-credit pack, redeemed in HobPad's own purchase sheet (Buy credits, then Redeem code), because a code redeemed from the Play Store app carries no HobPad account and would not credit. Play blocks target audience and content ratings until this is answered.
-2. **AI-generated assets.** The store listing review asks whether assets were created or edited with AI. The icon's source file in the repository has a Midjourney-style name, so the icon and the feature graphic that contains it probably need labelling.
-3. **Content ratings, target audience (13 and over) and data safety** are ready to enter as drafted above, once item 1 is settled; the content rating and data safety forms are submitted only with Chris's confirmation.
+- **Sign-in details (app access).** Reviewers get two Play promo codes for the 50-credit pack, from promotion "App review access" (10 codes, valid from 3 October 2026 to 1 October 2027; the codes are kept in `~/keystores/hobpad-promo-codes-app-review.csv`, not in the repository). The instructions say to redeem them in HobPad's own purchase sheet, because a code redeemed from the Play Store app carries no HobPad account and would not credit.
+- **Target audience.** 13 and over.
+- **Content ratings.** As in item 4 above. The IARC Terms of Use were accepted.
+- **Data safety.** As in the Data safety answers section. Play's public summary lists Purchase history and Device or other IDs; photos and files are declared as processed ephemerally, which Play does not show to users.
+
+When the listing is sent for review, Play asks whether its assets were created or edited with AI. The answer is Yes for the icon and for the feature graphic that contains it (Chris confirmed the icon is AI-generated, 3 October 2026).
+
+App content shows no declarations needing attention. Every change is saved in Publishing overview and nothing has been sent for review. The dashboard's only remaining step is the closed test (12 opted-in testers for 14 days) before production access can be requested, which is on hold.
