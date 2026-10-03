@@ -35,7 +35,7 @@ Your data lives on your device and in your own Google backup. Recipe content lea
 
 **Tags:** chosen in Play Console from Google's list; suggested Recipes, Shopping list, Cooking.
 
-**Contact details:** email chris.wild@gmail.com, website https://hobpad.app. **Decision:** whether to publish a phone number (optional on Play).
+**Contact details:** email chris.wild@gmail.com, website https://hobpad.app. No phone number (optional on Play; Chris, 3 October 2026).
 
 **Privacy policy URL:** https://hobpad.app/privacy.html, after the Google Play section drafted in `site/privacy.html` is deployed.
 
@@ -51,7 +51,7 @@ Your data lives on your device and in your own Google backup. Recipe content lea
 2. **Ads.** No, the app contains no ads.
 3. **Sign-in details (app access).** All functionality is available without special access. There is no sign-in.
 4. **Content ratings.** IARC questionnaire, category Productivity or Reference. Every content question is answered No: no violence, sexual content, profanity, drugs, gambling or user-generated content shared with others. Users cannot interact with each other or share their location. The app sells digital goods (credit packs). Expected result: suitable for all ages (PEGI 3, Everyone).
-5. **Target audience and content.** **Decision.** Recommended: ages 13 and over (13 to 15, 16 to 17, 18 and over). Including under-13 groups would bring the app under Google's Families policy, which adds requirements for no benefit to a cooking app. The App Store rating is 4+, which is a content rating, not a target audience, so the two do not conflict.
+5. **Target audience and content.** Ages 13 and over (13 to 15, 16 to 17, 18 and over), as Chris decided on 3 October 2026. Including under-13 groups would bring the app under Google's Families policy, which adds requirements for no benefit to a cooking app. The App Store rating is 4+, which is a content rating, not a target audience, so the two do not conflict.
 6. **Data safety.** See the next section.
 7. **Advertising ID.** No. The release manifest does not declare the advertising ID permission, and no advertising or analytics library is included.
 8. **Government apps.** No.
@@ -66,14 +66,14 @@ Google counts data as collected when it leaves the device for the developer's se
 
 **Is all collected data encrypted in transit?** Yes. Every request to the HobPad service uses HTTPS.
 
-**Do you provide a way for users to request that their data be deleted?** **Decision.** The only data the service keeps is the anonymous credit ledger, and recipe content is never stored. A user cannot easily identify their own ledger entry, because the identifier is not shown in the app. Two honest answers are possible. Answering No is defensible because no account exists and nothing personal is held. Answering Yes would need a deletion route, such as a Settings action that asks the service to erase the ledger for this install, which does not exist yet. Recommended: No, unless Google's review asks for a route.
+**Do you provide a way for users to request that their data be deleted?** Yes (Chris, 3 October 2026). People ask through the support form with a Google Play order number or an App Store order ID, and `scripts/ops-erase.sh` erases the account's server-side ledger. Deletion URL: https://hobpad.app/privacy.html#delete. Their notes, todos and recipes never leave the device.
 
 | Data type (Google's category) | Collected | Ephemeral | Required or optional | Purpose | What it is in HobPad |
 |---|---|---|---|---|---|
 | Photos and videos: Photos | Yes | Yes | Optional | App functionality | A photographed or attached recipe image, sent for automatic naming and for conversion |
 | Files and docs | Yes | Yes | Optional | App functionality | Recipe PDFs, whose first page is sent for automatic naming when no name is typed, and which are sent whole for conversion |
 | Financial info: Purchase history | Yes | No | Optional | App functionality | Google Play order numbers of credit packs, kept in the credit ledger so balances and refunds are correct |
-| Device or other IDs | Yes | No | Required | App functionality | The anonymous random identifier that the credit balance is kept against |
+| Device or other IDs | Yes | No | Required | App functionality; Fraud prevention, security and compliance | The anonymous random identifier that the credit balance is kept against, and the Play Integrity check that grants the free starter credits once per device |
 
 Not collected: name, email, contacts, location, messages, audio, health, web browsing, app interactions, diagnostics and crash logs. Recipe file backup to Google Drive is not collection, because the files go directly from the device to the user's own Drive and never reach the developer.
 

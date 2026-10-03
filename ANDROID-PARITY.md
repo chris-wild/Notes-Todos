@@ -1,6 +1,6 @@
 # Android parity plan
 
-Status as of 2 October 2026, 15:00. iOS version 1.0.1 is waiting for App Store review with build 27. It was resubmitted at 11:54 with a screen recording and written answers to Apple's information request (Guideline 2.1), and builds 28 and 29 are in TestFlight only. Android version 0.4.6 (version code 10) is live on the Google Play internal testing track for Chris only. As of iOS build 29 and Android 0.4.6 the two apps have the same features. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play. The next section lists what is left. The sections after it are the original plan, kept as the record of how the work was scoped, with status notes added where items have since been completed.
+Status as of 3 October 2026, 10:00. iOS version 1.0.1 is waiting for App Store review with build 27. It was resubmitted on 2 October with a screen recording and written answers to Apple's information request (Guideline 2.1), and builds 28 to 30 are in TestFlight only. Android version 0.4.7 (version code 11) is live on the Google Play internal testing track for Chris only. As of iOS build 30 and Android 0.4.7 the two apps have the same features. This document plans the work needed to bring the Android app up to the iOS feature set and launch it on Google Play. The next section lists what is left. The sections after it are the original plan, kept as the record of how the work was scoped, with status notes added where items have since been completed.
 
 ## What is left
 
@@ -25,17 +25,29 @@ Every item below was checked on 2 October 2026 against the source, App Store Con
 11. The hobpad.app support page answers how credits survive a new Android phone and explains that iPhone and Android keep separate balances (decision D3, accepted), and the home page says HobPad is coming soon to Google Play. Both were deployed on 2 October.
 12. The privacy policy at hobpad.app now covers Google Play purchases and naming of recipes added without a name. It was deployed on 2 October.
 
+### Free credits once per device, and deletion on request (3 October)
+
+Built on both platforms and live in production. New installs from iOS build 30 and Android 0.4.7 start at zero, and the Worker grants the 5 free credits only to a device whose platform bit says it has not had them: Apple DeviceCheck bit0 on iOS, Play Integrity device recall bitFirst on Android. RiderNav must never use those two bits. Older builds keep the old grant while the Worker's `LEGACY_FREE_OPS` is "1". Deletion requests are handled with `scripts/ops-erase.sh`, by Google Play order number or account identifier. Verified: 68 Worker tests; staging and production checked against Apple and Google; a real DeviceCheck token from the iPhone 11 Pro accepted by Apple's development server; new installs on the simulator and emulator granted through the staging test check.
+
+Still open on this work:
+
+1. **Google device recall access.** The beta interest form was submitted on 3 October; Google replies only if HobPad is chosen. Until then, new Android installs on 0.4.7 get no free credits (their grant stays pending and is retried). If Google declines, Android needs another way to recognise a device before public launch.
+2. **The first real device recall answer.** Google documents empty values only for "unavailable", so the Worker waits rather than grants on an empty answer. Once access is granted, check what a never-written device returns on the OnePlus and adjust if it is empty.
+3. **App Store order lookups for deletion requests.** Need an In-App Purchase key from App Store Connect (Users and Access, Integrations, In-App Purchase). Creating it was blocked for Claude as a secret-store action, so Chris creates it or tells Claude explicitly to. Then set `APPLE_IAP_PRIVATE_KEY`, `APPLE_IAP_KEY_ID` and `APPLE_ISSUER_ID` on both Workers.
+4. **Website.** The privacy policy section "Free credits and device checks" and "Deleting your data", and the support answer "How do I delete my data?", are written but not deployed, because they promise App Store order lookups (item 3).
+5. **Turn `LEGACY_FREE_OPS` to "0"** once no build from before device checks is in use, which for iOS means after a version newer than 1.0.1 (build 27) is released.
+6. **App Review notes for the next version.** A reviewer device that has had HobPad's free credits before will not get them again; say so, and note that conversion can be tested with a sandbox purchase at no cost.
+
 ### Still to verify
 
-1. **0.4.6 on the OnePlus.** The Play copy of HobPad on the OnePlus was still 0.4.2 at 15:00. Update it from the Play Store, then check blank-name naming with a photo, Delete All Notes and the Todos tab.
+1. **0.4.7 on the OnePlus.** Update HobPad from the Play Store, then check blank-name naming with a photo, Delete All Notes and the Todos tab. The existing account keeps its credits.
 2. **Delete All Notes, run end to end.** The menu item and confirmation were checked on the iOS simulator and the Android emulator, cancelling each time. No real wipe has been run, because both test devices hold copies of Chris's notes.
 3. **Untested paths.** Three paths have not been exercised on Android. The first is the paywall opening when a conversion needs more credits than the balance holds. The second is a refund. Refunding test order GPA.3358-4385-8365-92846 in Play Console should cause the Worker's six-hourly voided-purchases check to remove 50 credits. The third is a full cloud restore of the database onto a new phone.
 4. **Android 8.0 and 8.1.** The fallback for Automatic units on these versions has not been run on a device, because no Android 8 emulator is installed.
 
 ### Decisions for Chris
 
-1. **Play listing answers** from `play-listing/play-store-listing.md`: the target audience (13 and over is recommended), the data deletion answer (No is recommended), and whether to publish a phone number.
-2. **The next iOS version.** Build 29 cannot reach the App Store until a new version is created after 1.0.1. That version should also carry three changes. The first is the corrected App Store description, which still says photography is free without limits and that recipe content is sent only for conversion. The second is the two replacement Todos screenshots in `app-store/screenshots/`. The third is the version number, which only Chris changes.
+1. **The next iOS version.** Build 29 cannot reach the App Store until a new version is created after 1.0.1. That version should also carry three changes. The first is the corrected App Store description, which still says photography is free without limits and that recipe content is sent only for conversion. The second is the two replacement Todos screenshots in `app-store/screenshots/`. The third is the version number, which only Chris changes.
 
 ### Play Console store setup
 
@@ -57,7 +69,7 @@ On hold until Chris recruits HobPad testers. Google requires at least 12 testers
 ### Housekeeping
 
 1. On the OnePlus, remove HobPad dev (`uk.co.promptbuilt.hobpad.dev`) once 0.4.6 has been checked, and turn Recipe file backup back on in HobPad's Settings.
-2. On the iPhone 11 Pro, install build 29 from TestFlight, which replaces the development build installed on 2 October, and delete the HobPadUITests runner app.
+2. On the iPhone 11 Pro, install build 30 from TestFlight, which replaces the development build installed on 3 October for the DeviceCheck probe, and delete the HobPadUITests runner app.
 3. The Android emulator is still set to 1080 by 1920 at density 420 for the Play screenshots. Reset it with `adb shell wm size reset` and `adb shell wm density reset` when the screenshots are final.
 4. Keep offline copies of `~/keystores/hobpad-upload.jks` and `~/keystores/hobpad-play-service-account.json`.
 5. Delete the two Google Cloud OAuth clients for the retired `uk.co.promptbuilt.notestodos` ID.
