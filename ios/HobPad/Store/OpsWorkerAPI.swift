@@ -24,13 +24,35 @@ enum OpsWorkerAPI {
         /// Whether the account has ever bought a pack — with balance, this mirrors the
         /// Worker's naming-cap exemption (purchased accounts name freely while credits last).
         let purchased: Bool?
+        /// "pending" until the device check (StarterCheck) settles the free starter
+        /// credits, then "granted" or "denied". Absent from Workers older than the check.
+        let starter: String?
     }
     private struct PurchaseReply: Decodable { let balance: Int }
+    struct StarterReply: Decodable {
+        let starter: String
+        let balance: Int
+    }
+
+    /// Sent on every call: this client checks the device before the free starter credits,
+    /// so accounts it creates wait for that check (backend/ops/src/starter.js). The shared
+    /// Kotlin MeteredOcrClient sends the same header on conversion and naming calls.
+    private static let starterHeader = "X-HobPad-Starter"
 
     static func balance(token: UUID) async throws -> BalanceReply {
         var request = URLRequest(url: baseURL.appending(path: "v1/balance"))
         request.setValue("Bearer \(token.uuidString.lowercased())", forHTTPHeaderField: "Authorization")
         return try await send(request, as: BalanceReply.self)
+    }
+
+    /// Ask for the free starter credits with a device check; the reply is authoritative.
+    static func claimStarter(token: UUID, check: [String: Any]) async throws -> StarterReply {
+        var request = URLRequest(url: baseURL.appending(path: "v1/starter"))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token.uuidString.lowercased())", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: check)
+        return try await send(request, as: StarterReply.self)
     }
 
     /// Submit a signed transaction; the Worker verifies Apple's signature and credits the
@@ -63,6 +85,8 @@ enum OpsWorkerAPI {
     }
 
     private static func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        var request = request
+        request.setValue("1", forHTTPHeaderField: starterHeader)
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200...299).contains(status) else {

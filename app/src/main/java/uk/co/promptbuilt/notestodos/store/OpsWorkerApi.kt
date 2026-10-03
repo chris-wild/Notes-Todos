@@ -10,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import uk.co.promptbuilt.notestodos.BuildConfig
+import uk.co.promptbuilt.notestodos.ai.STARTER_HEADER
 
 /**
  * Commerce calls to the metering Worker (backend/ops). Extraction itself rides the shared
@@ -17,14 +18,26 @@ import uk.co.promptbuilt.notestodos.BuildConfig
  */
 class OpsWorkerApi(private val baseUrl: String) {
 
-    data class Balance(val balance: Int, val purchased: Boolean)
+    /** [starter] is "pending" until the device check (StarterCheck) settles it, then "granted" or "denied". */
+    data class Balance(val balance: Int, val purchased: Boolean, val starter: String)
 
     class WorkerException(val status: Int, body: String) :
         IOException("Credits service answered $status: ${body.take(200)}")
 
     suspend fun balance(token: String): Balance = withContext(Dispatchers.IO) {
         val json = execute(Request.Builder().url("$baseUrl/v1/balance").header("Authorization", "Bearer $token").get())
-        Balance(json.getInt("balance"), json.optBoolean("purchased", false))
+        Balance(json.getInt("balance"), json.optBoolean("purchased", false), json.optString("starter", "granted"))
+    }
+
+    /** Asks for the free starter credits with a device check; returns the settled balance. */
+    suspend fun claimStarter(token: String, check: JSONObject): Balance = withContext(Dispatchers.IO) {
+        val json = execute(
+            Request.Builder()
+                .url("$baseUrl/v1/starter")
+                .header("Authorization", "Bearer $token")
+                .post(check.toString().toRequestBody("application/json".toMediaType())),
+        )
+        Balance(json.getInt("balance"), false, json.getString("starter"))
     }
 
     /**
@@ -49,7 +62,7 @@ class OpsWorkerApi(private val baseUrl: String) {
         }
 
     private fun execute(builder: Request.Builder): JSONObject =
-        http.newCall(builder.build()).execute().use { response ->
+        http.newCall(builder.header(STARTER_HEADER, "1").build()).execute().use { response ->
             val text = response.body?.string().orEmpty()
             if (!response.isSuccessful) throw WorkerException(response.code, text)
             JSONObject(text)

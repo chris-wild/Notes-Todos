@@ -53,6 +53,7 @@ class OpsStore(
     context: Context,
     private val account: OpsAccount,
     private val api: OpsWorkerApi,
+    private val starterCheck: StarterCheck,
 ) : PurchasesUpdatedListener {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -66,6 +67,7 @@ class OpsStore(
         .build()
 
     private var started = false
+    private var lastStarterAttempt = 0L
 
     /** Idempotent; called once at app start. */
     fun start() {
@@ -104,9 +106,28 @@ class OpsStore(
         try {
             val reply = api.balance(account.token())
             _state.update { it.copy(balance = reply.balance, purchased = reply.purchased) }
+            if (reply.starter == "pending") claimStarter()
         } catch (e: Exception) {
             // Offline is normal; keep the last known balance rather than alarming anyone.
             Log.i(TAG, "balance refresh failed: ${e.message}")
+        }
+    }
+
+    /**
+     * A new account's free credits wait for a device check (StarterCheck). Anything short of a
+     * clear answer leaves them pending on the Worker, so this simply tries again at the next
+     * refresh, at most once a minute.
+     */
+    private suspend fun claimStarter() {
+        val now = System.currentTimeMillis()
+        if (now - lastStarterAttempt < STARTER_RETRY_MS) return
+        lastStarterAttempt = now
+        try {
+            val token = account.token()
+            val reply = api.claimStarter(token, starterCheck.body(token))
+            _state.update { it.copy(balance = reply.balance) }
+        } catch (e: Exception) {
+            Log.i(TAG, "starter check not settled: ${e.message}")
         }
     }
 
@@ -220,6 +241,7 @@ class OpsStore(
 
     companion object {
         private const val TAG = "OpsStore"
+        private const val STARTER_RETRY_MS = 60_000L
 
         /**
          * Sale copy for each pack. The Worker's PRODUCT_CREDITS map (backend/ops/wrangler.toml)

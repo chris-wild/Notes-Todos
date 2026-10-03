@@ -99,6 +99,7 @@ dependencies {
 
     // Credit packs (store/OpsStore.kt), verified server-side by the Worker.
     implementation(libs.play.billing)
+    implementation(libs.play.integrity)
 
     testImplementation(libs.junit)
 }

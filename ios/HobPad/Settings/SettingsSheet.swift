@@ -11,6 +11,9 @@ struct SettingsSheet: View {
     @State private var importOpen = false
     @State private var confirmImportData: Data?
     @State private var paywallOpen = false
+    #if DEBUG
+    @State private var starterProbe: String?
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -89,6 +92,20 @@ struct SettingsSheet: View {
                     Button("Import backup") { importOpen = true }
                 } header: {
                     Text("Backup (dev build)")
+                }
+
+                Section {
+                    Text("Asks the staging service what Apple's DeviceCheck holds for this device, without granting or changing anything.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button("Check this device") {
+                        Task { starterProbe = await Self.probeStarter() }
+                    }
+                    if let starterProbe {
+                        Text(starterProbe).font(.footnote)
+                    }
+                } header: {
+                    Text("Free credits device check (dev build)")
                 }
                 #endif
 
@@ -171,3 +188,26 @@ struct SettingsSheet: View {
         }
     }
 }
+
+#if DEBUG
+extension SettingsSheet {
+    /// POSTs a real DeviceCheck token to the staging Worker's probe (backend/ops/src/starter.js).
+    static func probeStarter() async -> String {
+        do {
+            guard var check = try await StarterCheck.body() else { return "DeviceCheck is not supported here." }
+            if check["platform"] as? String == "test" { return "No DeviceCheck in the simulator." }
+            check["probe"] = true
+            var request = URLRequest(url: OpsWorkerAPI.baseURL.appending(path: "v1/starter"))
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(OpsAccount.token().uuidString.lowercased())", forHTTPHeaderField: "Authorization")
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: check)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return "\(status): \(String(data: data, encoding: .utf8) ?? "")"
+        } catch {
+            return "Failed: \(error.localizedDescription)"
+        }
+    }
+}
+#endif

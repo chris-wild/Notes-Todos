@@ -21,6 +21,7 @@
 // device that fails integrity) leaves the state "pending" so a later launch can try again;
 // only "this device already had them" settles it as "denied".
 
+import { es256Jwt } from "./es256.js";
 import { accessToken, GoogleError } from "./google.js";
 
 const DEVICECHECK = {
@@ -67,21 +68,14 @@ async function deviceCheckJwt(env) {
   }
   const now = Date.now();
   if (cachedJwt?.keyId === env.DEVICECHECK_KEY_ID && cachedJwt.expiresAt > now) return cachedJwt.jwt;
-  let key;
+  let jwt;
   try {
-    const der = Buffer.from(env.DEVICECHECK_PRIVATE_KEY.replace(/-----[^-]+-----/g, "").replace(/\s+/g, ""), "base64");
-    key = await crypto.subtle.importKey("pkcs8", der, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+    jwt = await es256Jwt(env.DEVICECHECK_PRIVATE_KEY, { kid: env.DEVICECHECK_KEY_ID }, { iss: env.APPLE_TEAM_ID, iat: Math.floor(now / 1000) });
   } catch {
     throw unavailable("Device checks are not configured.");
   }
-  const signingInput =
-    b64url(JSON.stringify({ alg: "ES256", kid: env.DEVICECHECK_KEY_ID })) +
-    "." +
-    b64url(JSON.stringify({ iss: env.APPLE_TEAM_ID, iat: Math.floor(now / 1000) }));
-  // WebCrypto's ECDSA signature is already the raw r||s form JWS expects.
-  const signature = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, key, new TextEncoder().encode(signingInput));
   // Apple accepts a token for an hour; renewing well inside that keeps clock skew harmless.
-  cachedJwt = { keyId: env.DEVICECHECK_KEY_ID, jwt: `${signingInput}.${b64url(signature)}`, expiresAt: now + 20 * 60 * 1000 };
+  cachedJwt = { keyId: env.DEVICECHECK_KEY_ID, jwt, expiresAt: now + 20 * 60 * 1000 };
   return cachedJwt.jwt;
 }
 
@@ -120,13 +114,21 @@ const appleCheck = {
     const environment = body.environment === "development" && env.TEST_MODE === "1" ? "development" : "production";
     const base = DEVICECHECK[environment];
     const text = await deviceCheckCall(env, base, "query_two_bits", { device_token: deviceToken });
+    // A device with no bits yet answers 200 with a plain-text line instead of JSON. Apple's
+    // current documentation words it "Bit State Not Found"; older material and some servers
+    // say "Failed to find bit state". Either means "never set".
     let used = false;
-    if (!/bit state not found/i.test(text)) {
-      try {
-        used = JSON.parse(text).bit0 === true;
-      } catch {
-        throw unavailable("Apple's answer could not be read.");
-      }
+    let parsed = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = null;
+    }
+    if (parsed && typeof parsed === "object") {
+      used = parsed.bit0 === true;
+    } else if (!/bit state/i.test(text)) {
+      console.log(JSON.stringify({ op: "devicecheck", endpoint: "query_two_bits", unreadable: text.slice(0, 80) }));
+      throw unavailable("Apple's answer could not be read.");
     }
     return {
       used,
@@ -215,6 +217,21 @@ const CHECKS = { ios: appleCheck, android: googleCheck, test: testCheck };
  * POST /v1/starter. Returns { status, body } where body is { starter, balance } on success.
  */
 export async function claimStarter(env, token, account, body) {
+  // Staging only: report a real device's bit without granting or writing anything, so the
+  // DeviceCheck path can be exercised from a development build on a phone whose account is
+  // already settled (the dev-build Settings button in ios/HobPad/Settings/SettingsSheet.swift).
+  if (body?.probe === true) {
+    if (env.TEST_MODE !== "1") return { status: 403, body: { error: { type: "test_mode_disabled", message: "Probes are disabled." } } };
+    const check = CHECKS[body.platform];
+    if (!check) return { status: 422, body: { error: { type: "bad_request", message: "Unknown platform." } } };
+    try {
+      const { used } = await check.inspect(env, token, body);
+      return { status: 200, body: { probe: true, used } };
+    } catch (e) {
+      if (!(e instanceof StarterError)) throw e;
+      return { status: e.status, body: { error: { type: e.type, message: e.message } } };
+    }
+  }
   const current = await account.starter();
   if (current.starter !== "pending") return { status: 200, body: current };
   const check = CHECKS[body?.platform];

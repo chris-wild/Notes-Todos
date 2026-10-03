@@ -17,6 +17,11 @@ const DC_PROD = "https://api.devicecheck.apple.com/v1/";
 const DC_DEV = "https://api.development.devicecheck.apple.com/v1/";
 const PI = "https://playintegrity.googleapis.com/v1/";
 const ADMIN = "admin-secret-for-tests";
+const APPLE_LOOKUP = "https://api.storekit.itunes.apple.com/inApps/v1/lookup/";
+const APPLE_LOOKUP_SANDBOX = "https://api.storekit-sandbox.itunes.apple.com/inApps/v1/lookup/";
+// App Store order id -> { environment, appAccountToken } served by the lookup stubs.
+const appleOrders = new Map();
+const appleLookups = [];
 
 const realFetch = globalThis.fetch;
 const jsonReply = (status, body) =>
@@ -60,6 +65,9 @@ beforeAll(async () => {
     DEVICECHECK_PRIVATE_KEY: pem(ecPkcs8),
     GOOGLE_SERVICE_ACCOUNT_JSON: JSON.stringify({ type: "service_account", client_email: "sa@hobpad-test.iam.gserviceaccount.com", private_key: pem(rsaPkcs8) }),
     ADMIN_TOKEN: ADMIN,
+    APPLE_IAP_PRIVATE_KEY: pem(ecPkcs8),
+    APPLE_IAP_KEY_ID: "IAPKEY1234",
+    APPLE_ISSUER_ID: "issuer-uuid",
   };
 
   globalThis.fetch = async (input, init) => {
@@ -75,13 +83,25 @@ beforeAll(async () => {
       if (!body.device_token.startsWith("dev-")) return new Response("Bad Device Token", { status: 400 });
       const bits = appleBits[environment];
       if (url.endsWith("/query_two_bits")) {
-        if (!bits.has(body.device_token)) return new Response("Bit State Not Found", { status: 200 });
+        if (!bits.has(body.device_token)) {
+          return new Response(body.device_token.endsWith("-old") ? "Failed to find bit state" : "Bit State Not Found", { status: 200 });
+        }
         return jsonReply(200, { bit0: bits.get(body.device_token), bit1: false, last_update_time: "2026-10" });
       }
       if (url.endsWith("/update_two_bits")) {
         bits.set(body.device_token, body.bit0);
         return new Response("", { status: 200 });
       }
+    }
+    if (url.startsWith(APPLE_LOOKUP) || url.startsWith(APPLE_LOOKUP_SANDBOX)) {
+      const environment = url.startsWith(APPLE_LOOKUP) ? "Production" : "Sandbox";
+      const auth = await verifyEs256(init.headers.authorization.slice("Bearer ".length));
+      appleLookups.push({ environment, auth });
+      if (!auth.ok) return jsonReply(401, {});
+      const order = appleOrders.get(decodeURIComponent(url.split("/").pop()));
+      if (!order || order.environment !== environment) return jsonReply(200, { status: 1 });
+      const jws = `${Buffer.from("{}").toString("base64url")}.${Buffer.from(JSON.stringify({ appAccountToken: order.token })).toString("base64url")}.sig`;
+      return jsonReply(200, { status: 0, signedTransactions: [jws] });
     }
     if (url.startsWith(PI)) {
       if (init?.headers?.authorization !== `Bearer ${ACCESS_TOKEN}`) return jsonReply(401, { error: { code: 401 } });
@@ -149,6 +169,14 @@ async function integrityToken(token, device, overrides = {}) {
   integrityTokens.set(integrity, { payload, device });
   return integrity;
 }
+
+describe("starterNonce", () => {
+  // Pinned in app/src/test/.../StarterCheckTest.kt too (there with base64 padding, which the
+  // Worker ignores): the two sides must compute the same nonce.
+  it("matches the Android client", async () => {
+    expect(await starterNonce("1B4E28BA-2FA1-41D2-883F-0016D3CCA427")).toBe("kQDtv7xWYJgVMr2kNTBf6932c9-FHq5YWshJBNSARAQ");
+  });
+});
 
 describe("accounts from clients that check the device", () => {
   it("start at zero with the starter grant pending", async () => {
@@ -227,6 +255,13 @@ describe("POST /v1/starter on iOS (DeviceCheck)", () => {
       .toEqual({ starter: "denied", balance: 0 });
   });
 
+  it("reads the older 'Failed to find bit state' wording as never set", async () => {
+    const token = crypto.randomUUID();
+    await balance(token);
+    expect((await starter(token, { platform: "ios", deviceToken: "dev-iphone-old", environment: "production" })).body)
+      .toEqual({ starter: "granted", balance: 5 });
+  });
+
   it("uses Apple's development server only on staging", async () => {
     const token = crypto.randomUUID();
     await balance(token);
@@ -239,6 +274,18 @@ describe("POST /v1/starter on iOS (DeviceCheck)", () => {
     await balance(other, { e });
     await starter(other, { platform: "ios", deviceToken: "dev-iphone-3", environment: "development" }, { e });
     expect(appleCalls[0].environment).toBe("production");
+  });
+
+  it("answers a staging probe without writing or granting, and refuses probes in production", async () => {
+    const token = crypto.randomUUID();
+    await balance(token);
+    appleBits.production.set("dev-iphone-probe", true);
+    const reply = await starter(token, { platform: "ios", deviceToken: "dev-iphone-probe", environment: "production", probe: true });
+    expect(reply.body).toEqual({ probe: true, used: true });
+    expect(appleCalls.map((c) => c.endpoint)).toEqual(["query_two_bits"]);
+    expect((await balance(token)).body.starter).toBe("pending");
+    const e = { ...testEnv, TEST_MODE: "0" };
+    expect((await starter(token, { platform: "ios", deviceToken: "dev-iphone-probe", probe: true }, { e })).status).toBe(403);
   });
 
   it("stays pending when Apple is unavailable", async () => {
@@ -337,6 +384,24 @@ describe("POST /v1/admin/erase", () => {
     expect((await balance(token)).body).toEqual({ balance: 0, purchased: false, starter: "pending" });
     expect((await starter(token, { platform: "ios", deviceToken: "dev-iphone-erase", environment: "production" })).body)
       .toEqual({ starter: "denied", balance: 0 });
+  });
+
+  it("finds an account by App Store order id, trying production then sandbox", async () => {
+    const token = crypto.randomUUID();
+    await balance(token);
+    appleOrders.set("MT3BQRK2W5", { environment: "Sandbox", token });
+    appleLookups.length = 0;
+    expect((await erase({ appleOrderId: "MT3BQRK2W5" })).body).toEqual({ erased: true, googleOrders: 0 });
+    expect(appleLookups.map((l) => l.environment)).toEqual(["Production", "Sandbox"]);
+    expect(appleLookups[0].auth.header).toEqual({ alg: "ES256", kid: "IAPKEY1234", typ: "JWT" });
+    expect(appleLookups[0].auth.claims).toMatchObject({ iss: "issuer-uuid", aud: "appstoreconnect-v1", bid: "uk.co.promptbuilt.hobpad" });
+    expect((await erase({ appleOrderId: "UNKNOWN1" })).status).toBe(404);
+  });
+
+  it("says when App Store order lookups are not configured", async () => {
+    const e = { ...testEnv, APPLE_IAP_PRIVATE_KEY: undefined };
+    const reply = await call("/v1/admin/erase", { method: "POST", body: { appleOrderId: "MT3BQRK2W5" }, headers: { authorization: `Bearer ${ADMIN}` }, checked: false, e });
+    expect(reply.status).toBe(503);
   });
 
   it("finds an account by Google order id and removes its order index entries", async () => {

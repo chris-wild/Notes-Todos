@@ -32,6 +32,7 @@ final class OpsStore {
     var message: String?
 
     private var started = false
+    private var lastStarterAttempt: Date?
 
     /// Idempotent; kick off from the root view's `.task`.
     func start() async {
@@ -72,8 +73,24 @@ final class OpsStore {
             let reply = try await OpsWorkerAPI.balance(token: OpsAccount.token())
             balance = reply.balance
             purchased = reply.purchased ?? purchased
+            if reply.starter == "pending" { await claimStarter() }
         } catch {
             // Offline is normal; keep the last known balance rather than alarming anyone.
+        }
+    }
+
+    /// A new account's free credits wait for a device check (StarterCheck). Anything short
+    /// of a clear answer leaves them pending on the Worker, so this simply tries again at
+    /// the next refresh, at most once a minute.
+    private func claimStarter() async {
+        if let last = lastStarterAttempt, Date().timeIntervalSince(last) < 60 { return }
+        lastStarterAttempt = Date()
+        do {
+            guard let check = try await StarterCheck.body() else { return }
+            let reply = try await OpsWorkerAPI.claimStarter(token: OpsAccount.token(), check: check)
+            balance = reply.balance
+        } catch {
+            Logger.store.info("starter check not settled: \(error.localizedDescription)")
         }
     }
 

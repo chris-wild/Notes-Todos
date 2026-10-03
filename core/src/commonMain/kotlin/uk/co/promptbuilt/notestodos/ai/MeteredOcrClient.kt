@@ -21,6 +21,10 @@ class InsufficientOpsException(val needed: Int, val balance: Int) :
  * passed through verbatim, so parsing here mirrors AnthropicClient. Prompts, model and
  * billing all live server-side.
  */
+
+/** Sent on every metering call by clients that check the device for the free starter credits. */
+const val STARTER_HEADER = "X-HobPad-Starter"
+
 class MeteredOcrClient(
     private val baseUrl: String,
     private val tokenProvider: () -> String,
@@ -61,6 +65,9 @@ class MeteredOcrClient(
             headers = mapOf(
                 "Authorization" to "Bearer ${tokenProvider()}",
                 "Content-Type" to "text/plain",
+                // This client checks the device before the free starter credits are granted
+                // (backend/ops/src/starter.js), so accounts it creates wait for that check.
+                STARTER_HEADER to "1",
             ),
             body = body,
             // The Worker relays to Anthropic and only then answers; a multi-page PDF can

@@ -24,6 +24,7 @@ import uk.co.promptbuilt.notestodos.data.createSettingsDataStore
 import uk.co.promptbuilt.notestodos.store.OpsAccount
 import uk.co.promptbuilt.notestodos.store.OpsStore
 import uk.co.promptbuilt.notestodos.store.OpsWorkerApi
+import uk.co.promptbuilt.notestodos.store.StarterCheck
 
 class NotesTodosApp : Application() {
 
@@ -50,7 +51,7 @@ class NotesTodosApp : Application() {
     // only in debug builds (a developer tool); release builds have no key UI at all.
     val opsAccount by lazy { OpsAccount(this) }
     val opsApi by lazy { OpsWorkerApi(BuildConfig.OPS_WORKER_URL) }
-    val opsStore by lazy { OpsStore(this, opsAccount, opsApi) }
+    val opsStore by lazy { OpsStore(this, opsAccount, opsApi, StarterCheck(this)) }
     private val meteredOcr by lazy {
         MeteredOcrClient(BuildConfig.OPS_WORKER_URL, { opsAccount.token() }, { appPrefs.resolvedUnits() })
     }
