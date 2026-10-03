@@ -22,6 +22,7 @@ const APPLE_LOOKUP_SANDBOX = "https://api.storekit-sandbox.itunes.apple.com/inAp
 // App Store order id -> { environment, appAccountToken } served by the lookup stubs.
 const appleOrders = new Map();
 const appleLookups = [];
+let appleLookupProductionStatus = 200;
 
 const realFetch = globalThis.fetch;
 const jsonReply = (status, body) =>
@@ -98,8 +99,9 @@ beforeAll(async () => {
       const auth = await verifyEs256(init.headers.authorization.slice("Bearer ".length));
       appleLookups.push({ environment, auth });
       if (!auth.ok) return jsonReply(401, {});
+      if (environment === "Production" && appleLookupProductionStatus !== 200) return new Response("", { status: appleLookupProductionStatus });
       const order = appleOrders.get(decodeURIComponent(url.split("/").pop()));
-      if (!order || order.environment !== environment) return jsonReply(200, { status: 1 });
+      if (!order || order.environment !== environment) return new Response("", { status: 404 });
       const jws = `${Buffer.from("{}").toString("base64url")}.${Buffer.from(JSON.stringify({ appAccountToken: order.token })).toString("base64url")}.sig`;
       return jsonReply(200, { status: 0, signedTransactions: [jws] });
     }
@@ -396,6 +398,19 @@ describe("POST /v1/admin/erase", () => {
     expect(appleLookups[0].auth.header).toEqual({ alg: "ES256", kid: "IAPKEY1234", typ: "JWT" });
     expect(appleLookups[0].auth.claims).toMatchObject({ iss: "issuer-uuid", aud: "appstoreconnect-v1", bid: "uk.co.promptbuilt.hobpad" });
     expect((await erase({ appleOrderId: "UNKNOWN1" })).status).toBe(404);
+  });
+
+  it("still finds a sandbox order when production refuses the lookup", async () => {
+    const token = crypto.randomUUID();
+    await balance(token);
+    appleOrders.set("SANDBOXONLY1", { environment: "Sandbox", token });
+    appleLookupProductionStatus = 401;
+    try {
+      expect((await erase({ appleOrderId: "SANDBOXONLY1" })).body).toEqual({ erased: true, googleOrders: 0 });
+      expect((await erase({ appleOrderId: "NOWHERE" })).status).toBe(404);
+    } finally {
+      appleLookupProductionStatus = 200;
+    }
   });
 
   it("says when App Store order lookups are not configured", async () => {

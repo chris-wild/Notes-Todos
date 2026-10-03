@@ -61,6 +61,10 @@ LEGACY_FREE_OPS = "1"
 # DEVICECHECK_PRIVATE_KEY (~/keystores/hobpad-devicecheck-AuthKey_6SX2P37597.p8).
 DEVICECHECK_KEY_ID = "6SX2P37597"
 APPLE_TEAM_ID = "U9RDY3V58L"
+# App Store Server API order lookups for deletion requests (src/admin.js); the .p8 key is the
+# secret APPLE_IAP_PRIVATE_KEY (~/keystores/hobpad-iap-SubscriptionKey_YY79KZUR2C.p8).
+APPLE_IAP_KEY_ID = "YY79KZUR2C"
+APPLE_ISSUER_ID = "62047140-90a8-4c15-a6b9-3657c1785fcd"
 MAX_PDF_BYTES = "15728640"
 TITLE_DAILY_LIMIT = "30"
 PAID_TITLE_DAILY_LIMIT = "500"

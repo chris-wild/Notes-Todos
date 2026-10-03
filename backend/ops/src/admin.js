@@ -43,13 +43,23 @@ async function appleOrderAccount(env, orderId) {
     { kid: env.APPLE_IAP_KEY_ID, typ: "JWT" },
     { iss: env.APPLE_ISSUER_ID, iat, exp: iat + 600, aud: "appstoreconnect-v1", bid: env.BUNDLE_ID },
   );
+  // Ask both environments: an order can only exist in one, and one refusing (for example
+  // production before the app is on the App Store) must not hide an answer from the other.
+  const failures = [];
   for (const base of APPLE_LOOKUP) {
-    const reply = await fetch(`${base}${encodeURIComponent(orderId)}`, { headers: { authorization: `Bearer ${jwt}` } });
-    if (!reply.ok) {
-      console.log(JSON.stringify({ op: "apple_order_lookup", status: reply.status }));
-      return { error: { status: 502, type: "upstream", message: "The App Store could not be asked about that order." } };
+    let reply;
+    try {
+      reply = await fetch(`${base}${encodeURIComponent(orderId)}`, { headers: { authorization: `Bearer ${jwt}` } });
+    } catch {
+      failures.push("unreachable");
+      continue;
     }
-    const body = await reply.json();
+    if (reply.status === 404) continue;
+    if (!reply.ok) {
+      failures.push(reply.status);
+      continue;
+    }
+    const body = await reply.json().catch(() => ({}));
     for (const jws of body.status === 0 ? body.signedTransactions ?? [] : []) {
       try {
         const token = JSON.parse(Buffer.from(String(jws).split(".")[1], "base64url").toString("utf8")).appAccountToken;
@@ -57,6 +67,12 @@ async function appleOrderAccount(env, orderId) {
       } catch {
         // An unreadable transaction cannot name an account; try the next one.
       }
+    }
+  }
+  if (failures.length) {
+    console.log(JSON.stringify({ op: "apple_order_lookup", failures }));
+    if (failures.length === APPLE_LOOKUP.length) {
+      return { error: { status: 502, type: "upstream", message: "The App Store could not be asked about that order." } };
     }
   }
   return { token: null };
